@@ -9,18 +9,24 @@ using System.Threading;
 
 namespace HERO_Mecanum_Drive_Example1
 {
-    public class Program
+    public class 
+        
+        Program
     {
         /* create a talon */
-        static TalonSRX leftFrnt = new TalonSRX(4);
-        static TalonSRX leftRear = new TalonSRX(3);
-        static TalonSRX rghtFrnt = new TalonSRX(2);
-        static TalonSRX rghtRear = new TalonSRX(1);
+        static TalonSRX leftFrnt = new TalonSRX(1);
+        static TalonSRX leftRear = new TalonSRX(2);
+        static TalonSRX rghtFrnt = new TalonSRX(3);
+        static TalonSRX rghtRear = new TalonSRX(4);
+
+        static PneumaticControlModule pcm = new PneumaticControlModule(0);
 
         static GameController _gamepad = null;
 
         public static void Main()
         {
+            //int count = 0;
+
             /* loop forever */
             while (true)
             {
@@ -28,6 +34,16 @@ namespace HERO_Mecanum_Drive_Example1
                 Watchdog.Feed();
 
                 Drive();
+
+                /*
+                if (++count % 50 == 0)
+                {
+                    if (pcm.GetSolenoidOutput(0))
+                        pcm.SetSolenoidOutput(0, false);
+                    else
+                        pcm.SetSolenoidOutput(0, true);
+                }
+                */
 
                 Thread.Sleep(20);
             }
@@ -77,18 +93,18 @@ namespace HERO_Mecanum_Drive_Example1
             if (null == _gamepad)
                 _gamepad = new GameController(UsbHostDevice.GetInstance());
 
-            float x = _gamepad.GetAxis(0);      // Positive is strafe-right, negative is strafe-left
-            float y = -1 * _gamepad.GetAxis(1); // Positive is forward, negative is reverse
-            float turn = _gamepad.GetAxis(2);  // Positive is turn-right, negative is turn-left
+            float strafe = -1* _gamepad.GetAxis(0);      // Positive is strafe-right, negative is strafe-left
+            float turn = -1 * _gamepad.GetAxis(2);       // Positive is turn-right, negative is turn-left  
+            float throttle = _gamepad.GetAxis(1);   // Positive is forward, negative is reverse
 
-            Deadband(ref x);
-            Deadband(ref y);
+            Deadband(ref strafe);
             Deadband(ref turn);
+            Deadband(ref throttle);
 
-            float leftFrnt_throt = y + x + turn; // left front moves positive for forward, strafe-right, turn-right
-            float leftRear_throt = y - x + turn; // left rear moves positive for forward, strafe-left, turn-right
-            float rghtFrnt_throt = y - x - turn; // right front moves positive for forward, strafe-left, turn-left
-            float rghtRear_throt = y + x - turn; // right rear moves positive for forward, strafe-right, turn-left
+            float leftFrnt_throt = turn + strafe + throttle; // left front moves positive for forward, strafe-right, turn-right
+            float leftRear_throt = turn - strafe + throttle; // left rear moves positive for forward, strafe-left, turn-right
+            float rghtFrnt_throt = turn - strafe - throttle; // right front moves positive for forward, strafe-left, turn-left
+            float rghtRear_throt = turn + strafe - throttle; // right rear moves positive for forward, strafe-right, turn-left
 
             /* normalize here, there a many way to accomplish this, this is a simple solution */
             Normalize(ref leftFrnt_throt);
@@ -99,13 +115,15 @@ namespace HERO_Mecanum_Drive_Example1
             /* everything up until this point assumes positive spins motor so that robot moves forward.
                 But typically one side of the robot has to drive negative (red LED) to move robor forward.
                 Assuming the left-side has to be negative to move robot forward, flip the left side */
-            leftFrnt_throt *= -1;
-            leftRear_throt *= -1;
+            rghtFrnt_throt *= -1;
+            rghtRear_throt *= -1;
 
             leftFrnt.Set(ControlMode.PercentOutput, leftFrnt_throt);
             leftRear.Set(ControlMode.PercentOutput, leftRear_throt);
             rghtFrnt.Set(ControlMode.PercentOutput, rghtFrnt_throt);
             rghtRear.Set(ControlMode.PercentOutput, rghtRear_throt);
+
+            Debug.Print("  strafe:" + strafe + "  turn:" + turn + "  f/r:" + throttle);
         }
     }
 }
