@@ -23,7 +23,7 @@ namespace BB_2
 
         // global variables
         private static bool enabled = false;
-        private static bool enableBtnDown = false;
+        private static bool enableBtnWasDown = false;
         private static DateTime starttime;
         private static DateTime enabletime;
 
@@ -39,6 +39,8 @@ namespace BB_2
             // Invert the right hand motor directions
             rghtFrnt.SetInverted(true);
             rghtRear.SetInverted(true);
+            leftFrnt.SetInverted(true);
+            leftRear.SetInverted(true);
 
             // Initialize PCM and enable compressor
             // Compressor may be automatic
@@ -95,7 +97,7 @@ namespace BB_2
             else if (toNormalize < -1)
                 toNormalize = -1;
             else
-                { /* nothing to do */ }
+            { /* nothing to do */ }
         }
 
         // run drive motors from joystick inputs
@@ -104,8 +106,8 @@ namespace BB_2
         //  X axis right - turn left/right
         private static void Drive()
         {
-            float x    = _gamepad.GetAxis(0);      // Positive is strafe-right, negative is strafe-left
-            float y    = -1 * _gamepad.GetAxis(1); // Positive is forward, negative is reverse
+            float x = _gamepad.GetAxis(0);      // Positive is strafe-right, negative is strafe-left
+            float y = -1 * _gamepad.GetAxis(1); // Positive is forward, negative is reverse
             float turn = _gamepad.GetAxis(2);  // Positive is turn-right, negative is turn-left
 
             Deadband(ref x);
@@ -150,7 +152,6 @@ namespace BB_2
         {
             // Get the shooting buttons
             // Fire PCM solenoids based on button input
-            bool btn0 = _gamepad.GetButton(0);
             bool btn1 = _gamepad.GetButton(1);
             bool btn2 = _gamepad.GetButton(2);
             bool btn3 = _gamepad.GetButton(3);
@@ -158,21 +159,26 @@ namespace BB_2
             bool btn5 = _gamepad.GetButton(5);
             bool btn6 = _gamepad.GetButton(6);
             bool btn7 = _gamepad.GetButton(7);
+            bool btn10 = _gamepad.GetButton(10);
 
-            _pcm.SetSolenoidOutput(0, btn0);
-            _pcm.SetSolenoidOutput(1, btn1);
-            _pcm.SetSolenoidOutput(2, btn2);
-            _pcm.SetSolenoidOutput(3, btn3);
-            _pcm.SetSolenoidOutput(4, btn4);
-            _pcm.SetSolenoidOutput(5, btn5);
+            _pcm.SetSolenoidOutput(0, btn1);
+            _pcm.SetSolenoidOutput(1, btn2);
+            _pcm.SetSolenoidOutput(2, btn3);
+            _pcm.SetSolenoidOutput(3, btn4);
+            _pcm.SetSolenoidOutput(4, btn5);
+            _pcm.SetSolenoidOutput(5, btn6);
+
 
             // Enable button is pressed, enable and capture start time
-            bool enableBtn = btn0;
+            bool enableBtn = btn10;
             if (enableBtn)
-                enableBtnDown = false;
-            else if (!enableBtnDown)
+                enableBtnWasDown = true;
+            else if (enableBtnWasDown)
             {
                 enabled = !enabled;
+                Debug.Print("BB-2 is now: " + ((enabled) ? "ENABLED" : "DISABLED"));
+
+                enableBtnWasDown = false;
                 if (enabled)
                     enabletime = DateTime.Now;
             }
@@ -180,8 +186,8 @@ namespace BB_2
             // If enabled, time out and disable after 3 minutes
             if (enabled)
             {
-                if (DateTime.Now.Ticks - enabletime.Ticks > 180)
-                    enabled = false;
+                //        if (DateTime.Now.Ticks - enabletime.Ticks > 180)
+                //          enabled = false;
             }
         }
 
@@ -195,7 +201,6 @@ namespace BB_2
             float axis4 = _gamepad.GetAxis(4);
             float axis5 = _gamepad.GetAxis(5);
 
-            bool btn0 = _gamepad.GetButton(0);
             bool btn1 = _gamepad.GetButton(1);
             bool btn2 = _gamepad.GetButton(2);
             bool btn3 = _gamepad.GetButton(3);
@@ -207,13 +212,14 @@ namespace BB_2
             bool btn9 = _gamepad.GetButton(9);
             bool btn10 = _gamepad.GetButton(10);
             bool btn11 = _gamepad.GetButton(11);
+            bool btn12 = _gamepad.GetButton(12);
 
             // Print to console so we can debug them
             Debug.Print("a0: " + axis0 + " a1:" + axis1 + " a2:" + axis2 +
                 " a3:" + axis3 + " a4:" + axis4 + " a5:" + axis5 +
-                " b0:" + btn0 + " b1:" + btn1 + " b2:" + btn2 + " b3:" + btn3 +
+                " b1:" + btn1 + " b2:" + btn2 + " b3:" + btn3 +
                 " b4:" + btn4 + " b5:" + btn5 + " b6:" + btn6 + " b7:" + btn7 +
-                " b8:" + btn8 + " b9:" + btn9 + " b10:" + btn10 + " b11:" + btn11);
+                " b8:" + btn8 + " b9:" + btn9 + " b10:" + btn10 + " b11:" + btn11 + " b12:" + btn12);
         }
     }
 }
