@@ -15,27 +15,53 @@ namespace BB_2
 {
     public class Program
     {
-        // Create four drive talons and PCM
+        // Constants
+        private const int ThreadLoopTime = 20;  // loop time in msec
+        private const int SignalLightMax = 25;  // number of loops for toggling RSL
+
+        // Create gamepad instance
+        private const int BtnX = 1;             // X button
+        private const int BtnA = 2;             // A button
+        private const int BtnB = 3;             // B button
+        private const int BtnY = 4;             // Y button
+        private const int BtnLeftBumper = 5;    // Left Bumper
+        private const int BtnRightBumper = 6;   // Right Bumper
+        private const int BtnLeftTrigger = 7;   // Left Trigger
+        private const int BtnRightTrigger = 8;  // Right Trigger
+        private const int BtnBack = 9;          // Back button
+        private const int BtnStart = 10;        // Start button
+        private const int BtnLeftStick = 11;    // Left joystick press
+        private const int BtnRightStick = 12;   // Right joystick press
+
+        private const int AxisLeftStickX = 0;   // Left joystick X direction
+        private const int AxisLeftStickY = 1;   // Left joystick Y direction
+        private const int AxisRightStickX = 2;  // Right joystick X direction
+        private const int AxisRightStickY = 5;  // Right joystick Y direction
+
+        // TODO: DPAD directions?
+
+        // Constants - PCM ports
+        private const int PcmPortSignalLight = 7;   // Robot signal light port
+
+        // Static objects
+        private static LogitechGamepad _gamepad = new LogitechGamepad(UsbHostDevice.GetInstance(), 0);
+
+        // Create four drive talons and PCM on CAN bus
         private static TalonSRX _leftFrnt = new TalonSRX(1);
         private static TalonSRX _leftRear = new TalonSRX(2);
         private static TalonSRX _rghtFrnt = new TalonSRX(3);
         private static TalonSRX _rghtRear = new TalonSRX(4);
+
         private static TalonSRX _wrist = new TalonSRX(6);
+
         private static PneumaticControlModule _pcm = new PneumaticControlModule(0);
-
-        // Create gamepad instance
-        private static LogitechGamepad _gamepad = null;    // Investigate if this is a better gamepad object
-
-        private static CANifier _canifier = new CANifier(0);
 
         // Global variables
         private static bool _enabled = false;
         private static bool _enableBtnWasDown = false;
         private static DateTime _startTime;
-        private static DateTime _enableTime;
-
+        private static DateTime _enabledTime;
         private static int _signalLightCount = 0;
-        private static int _kPCMSignalLightPort = 7;
 
         //*********************************************************************
         //
@@ -46,64 +72,85 @@ namespace BB_2
             // Get the start time for tracking total on time
             _startTime = DateTime.Now;
 
-            // Create the gamepad object
-            if (null == _gamepad)
-                _gamepad = new LogitechGamepad(UsbHostDevice.GetInstance(), 0);
-
             // Invert all motor directions to match installation
             _rghtFrnt.SetInverted(true);
             _rghtRear.SetInverted(true);
             _leftFrnt.SetInverted(true);
             _leftRear.SetInverted(true);
 
-            // Initialize PCM and enable compressor
-            // (if needed) Compressor may be automatic
-
+            // TODO: Initialize PCM and enable compressor (if needed) Compressor may be automatic
 
             //
             // Main loop (forever)
             //
             while (true)
             {
-                // keep feeding watchdog to enable motors
-                if (_enabled)
-                    Watchdog.Feed();
+                HandleEnabledState();           // check enable button and process it
 
-                // use joysticks to run drive motors
-                Drive();
+                HandleDrive();                  // use joysticks to run drive motors
 
-                // use a joystick axis or dPad to move the wrist
-                HandleWrist();
+                HandleWrist();                  // use a joystick axis or dPad to move the wrist
 
-                // read buttons and control the firing solenoids
-                HandleButtons();
+                HandleButtons();                // read buttons and control the firing solenoids
 
-                // temporary logging code for printing inputs
-                DebugController();
+                DebugController();              // temporary logging code for printing inputs
 
-                // signal light flashes when enabled and solid when disabled 
-                HandleSignalLight();
-
-                // this provides the loop pacing at 20msec
-                Thread.Sleep(20);
+                Thread.Sleep(ThreadLoopTime);   // this provides the loop pacing at 20msec
             }
         }
 
         //*********************************************************************
         //
+        //  Process enabled state operation of robot
+        //
+        private static void SetSignalLight(bool onState)
+        {
+            _pcm.SetSolenoidOutput(_pcmPortSignalLight, onState);
+        }
+
+        private static void HandleEnabledState()
+        {
+            if (_gamepad.GetConnectedStatus() != CTRE.Phoenix.UsbDeviceConnection.Connected)
+                _enabled = false;
+
+            // keep feeding watchdog to enable motors
+            if (_enabled)
+            {
+                // this lets the drive motors, wrist motor, and PCM take commands
+                Watchdog.Feed();
+
+                // time out and disable after 3 minutes
+                //  if (DateTime.Now.Ticks - _enabledTime.Ticks > 180)
+                //      _enabled = false;
+
+                if (_signalLightCount++ == SignalLightMax)
+                {
+                    if (_pcm.GetSolenoidOutput(_pcmPortSignalLight))
+                        _pcm.SetSolenoidOutput(_pcmPortSignalLight, false);
+                    else
+                        _pcm.SetSolenoidOutput(_pcmPortSignalLight, true);
+                    _signalLightCount = 0;
+                }
+            }
+            else
+                SetSignalLight(true);
+        }
+
+        //*********************************************************************
+        //
         //  Deadband the joystick input
-        //      If value is within 10% of center, clear it.
+        //      If value is within +/-deadband range of center, clear it.
         //
         private static void Deadband(ref float value)
         {
-            if (value < -0.10)
-            { /* outside of deadband */ }
-            else if (value > +0.10)
-            { /* outside of deadband */ }
+            double deadband = 0.10;
+
+            if (value < -deadband)
+                value = (value + deadband) / (1.0 - deadband);  /* outside of deadband */
+            else if (value > +deadband)
+                value = (value - deadband) / (1.0 - deadband);  /* outside of deadband */
             else
-            { /* within 10% so zero it */
-                value = 0;
-            }
+                value = 0;                                      /* within deadband so zero it */
         }
 
         //*********************************************************************
@@ -129,11 +176,11 @@ namespace BB_2
         //      Y axis left - forward/back (joystick axis Y is negative forward)
         //      X axis right - turn left/right
         //
-        private static void Drive()
+        private static void HandleDrive()
         {
-            float x    = _gamepad.GetAxis(0);      // left x: Positive is strafe-right, negative is strafe-left
-            float y    = -1 * _gamepad.GetAxis(1); // left y: Positive is forward, negative is reverse
-            float turn = _gamepad.GetAxis(2);      // right x: Positive is turn-right, negative is turn-left
+            float x = _gamepad.GetAxis(AxisLeftStickX);      // left x: Positive is strafe-right, negative is strafe-left
+            float y = -1 * _gamepad.GetAxis(AxisLeftStickY); // left y: Positive is forward, negative is reverse
+            float turn = _gamepad.GetAxis(AxisRightStickX);     // right x: Positive is turn-right, negative is turn-left
 
             Deadband(ref x);
             Deadband(ref y);
@@ -164,20 +211,24 @@ namespace BB_2
         private static void HandleWrist()
         {
             // Get wrist axis or dPad from gamepad
-            bool armMoveDown = _gamepad.GetButton(7);  // left trigger
-            bool armMoveUp = _gamepad.GetButton(8);    // right trigger
-
-
             // _gamepad.GetBtn(POV);
+
             // derive an intended wrist angle
+            // _wrist.getSelectedSensor(...);
 
             // Move wrist motor up/down
-            if (_gamepad.GetButton(7))
+            if (_gamepad.GetButton(BtnLeftTrigger))
             {
-                //_wrist.Set(ControlMode.PercentOutput, )
+                //_wrist.Set(ControlMode.PercentOutput, 0.5);
             }
-
-            // _wrist.Set(TalonSRXControlMode.Position, wrist_angle);
+            else (_gamepad.GetButton(BtnRightTrigger)
+            {
+                //_wrist.Set(ControlMode.PercentOutput, -0.5);
+            }
+            else
+            {
+                // _wrist.Set(TalonSRXControlMode.Position, wrist_angle);
+            }
         }
 
         //*********************************************************************
@@ -186,50 +237,27 @@ namespace BB_2
         //
         private static void HandleButtons()
         {
-            // Get the shooting buttons
-            // Fire PCM solenoids based on button input
-            bool btnX = _gamepad.GetButton(1);         // x
-            bool btnA = _gamepad.GetButton(2);         // a
-            bool btnB = _gamepad.GetButton(3);         // b
-            bool btnY = _gamepad.GetButton(4);         // y
-            bool btnLBumper = _gamepad.GetButton(5);   // left bumper
-            bool btnRBumper = _gamepad.GetButton(6);   // right bumper
-            bool btnLTrigger = _gamepad.GetButton(7);  // left trigger
-            bool btnRTrigger = _gamepad.GetButton(8);  // right trigger
-            bool btnBack = _gamepad.GetButton(9);      // back
-            bool btnStart = _gamepad.GetButton(10);    // start
-            bool btnLStick = _gamepad.GetButton(11);   // left jstick
-            bool btnRStick = _gamepad.GetButton(12);   // right jstick
-
-            _pcm.SetSolenoidOutput(0, btnX);           // solenoid valve 1
-            _pcm.SetSolenoidOutput(1, btnA);           // solenoid valve 2
-            _pcm.SetSolenoidOutput(2, btnB);           // solenoid valve 3
-            _pcm.SetSolenoidOutput(3, btnY);           // solenoid valve 4
-            _pcm.SetSolenoidOutput(4, btnLBumper);     // solenoid valve 5
-            _pcm.SetSolenoidOutput(5, btnRBumper);     // solenoid valve 6
-
-            
-
             // Enable button is pressed, enable and capture start time
-            if (btnStart)
+            if (_gamepad.GetButton(BtnStart))
                 _enableBtnWasDown = true;
             else if (_enableBtnWasDown)
             {
                 _enabled = !_enabled;
-                Debug.Print("BB-2 is now: " + ((_enabled) ? "_enabled" : "DISABLED"));
-
                 _enableBtnWasDown = false;
                 if (_enabled)
-                    _enableTime = DateTime.Now;
+                    _enabledTime = DateTime.Now;
+
+                Debug.Print("BB-2 is now: " + ((_enabled) ? "ENABLED" : "DISABLED") + " at " + DateTime.Now());
             }
 
-            // If _enabled, time out and disable after 3 minutes
-            if (_enabled)
-            {
-                //        if (DateTime.Now.Ticks - _enableTime.Ticks > 180)
-                //          _enabled = false;
-            }
-        } 
+            // Fire PCM solenoids based on button input
+            _pcm.SetSolenoidOutput(0, _gamepad.GetButton(BtnX));            // solenoid valve 1
+            _pcm.SetSolenoidOutput(1, _gamepad.GetButton(BtnA));            // solenoid valve 2
+            _pcm.SetSolenoidOutput(2, _gamepad.GetButton(BtnB));            // solenoid valve 3
+            _pcm.SetSolenoidOutput(3, _gamepad.GetButton(BtnY));            // solenoid valve 4
+            _pcm.SetSolenoidOutput(4, _gamepad.GetButton(BtnLeftBumper));   // solenoid valve 5
+            _pcm.SetSolenoidOutput(5, _gamepad.GetButton(BtnRightBumper));  // solenoid valve 6            
+        }
 
         //*********************************************************************
         //
@@ -264,46 +292,12 @@ namespace BB_2
                 bool btn15 = _gamepad.GetButton(15);
                 bool btn16 = _gamepad.GetButton(16);
 
-                bool Down = _gamepad.GetButton(7);
-                bool Up = _gamepad.GetButton(8);
-
                 // Print to console so we can debug them
-                Debug.Print("a0: " + axis0 + " a1:" + axis1 + " a2:" + axis2 +
-                    " a3:" + axis3 + " a4:" + axis4 + " a5:" + axis5 +
-                    " b1:" + btn1 + " b2:" + btn2 + " b3:" + btn3 + " b4:" + btn4 + 
-                    " b5:" + btn5 + " b6:" + btn6 + " b7:" + btn7 + " b8:" + btn8 + 
-                    " b9:" + btn9 + " b10:" + btn10 + " b11:" + btn11 + " b12:" + btn12 +
-                    " b13" + btn13 + " b14:" + btn14 + " b15:" + btn15 + " b16:" + btn16 + " down:" + Down + " up:" + Up);
-
-                _canifier.SetLEDOutput(100, 0);
+                Debug.Print("a0:" + axis0 + " a1:" + axis1 + " a2:" + axis2 + " a3:" + axis3 + " a4:" + axis4 + " a5:" + axis5 +
+                            " b1:" + btn1 + " b2:" + btn2 + " b3:" + btn3 + " b4:" + btn4 + " b5:" + btn5 + " b6:" + btn6 +
+                            " b7:" + btn7 + " b8:" + btn8 + " b9:" + btn9 + " b10:" + btn10 + " b11:" + btn11 + " b12:" + btn12 +
+                            " b13" + btn13 + " b14:" + btn14 + " b15:" + btn15 + " b16:" + btn16);
             }
-        }
-        private static void FlashSignalLight()
-        {
-            _signalLightCount++;
-            if (_signalLightCount == 25)
-            {
-                //turn on
-                if (_pcm.GetSolenoidOutput(_kPCMSignalLightPort))
-                    _pcm.SetSolenoidOutput(_kPCMSignalLightPort, false);
-                //off light
-                else
-                    _pcm.SetSolenoidOutput(_kPCMSignalLightPort, true);
-                _signalLightCount = 0;
-            }
-        }
-
-        private static void SetSignalLight(bool onState)
-        {
-            _pcm.SetSolenoidOutput(_kPCMSignalLightPort, onState);
-        }
-
-        private static void HandleSignalLight()
-        {
-            if (_enabled)
-                FlashSignalLight();
-            else
-                SetSignalLight(true);
         }
     }
 }
