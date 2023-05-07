@@ -272,19 +272,20 @@ namespace BB_2
 
     private static void HandleWristButtons()
     {
+      float wristOutput = 0.0F;
+
       // Use wrist buttons for up and down to control wrist elevation
       if (IsPovHeld(PovBtns.North))
-      {
-        //_wrist.Set(ControlMode.PercentOutput, 0.5);
-      }
+        wristOutput = 0.5F;
       else if (IsPovHeld(PovBtns.South))
-      {
-        //_wrist.Set(ControlMode.PercentOutput, -0.5);
-      }
+        wristOutput = -0.5F;
       else
-      {
-        _wrist.Set(TalonSRXControlMode.PercentOutput, 0);
-      }
+        wristOutput = 0.0F;
+
+      if (wristOutput != 0.0)
+        Debug.Print("BB-2 wrist moving: " + ((wristOutput > 0.0) ? "UP" : "DOWN"));
+
+      _wrist.Set(TalonSRXControlMode.PercentOutput, wristOutput);
     }
 
     //*********************************************************************
