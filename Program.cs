@@ -17,7 +17,6 @@ namespace BB_2
   {
     // Constants
     private const int ThreadLoopTime = 10;  // loop time in msec
-    private const int SignalLightMax = 50;  // number of loops for toggling RSL
 
     // Constants - Create gamepad instance
     private const int BtnX = 1;             // X button             - fire
@@ -28,18 +27,31 @@ namespace BB_2
     private const int BtnLeftTrigger = 7;   // Left Trigger         - wrist down
     private const int BtnRightBumper = 6;   // Right Bumper         - fire
     private const int BtnRightTrigger = 8;  // Right Trigger        - fire
-                                            // private const int BtnBack = 9;          // Back button          - unused
+    // private const int BtnBack = 9;          // Back button          - unused
     private const int BtnStart = 10;        // Start button         - enable robot
-                                            // private const int BtnLeftStick = 11;    // Left joystick press  - unused
-                                            // private const int BtnRightStick = 12;   // Right joystick press - unused
+    // private const int BtnLeftStick = 11;    // Left joystick press  - unused
+    // private const int BtnRightStick = 12;   // Right joystick press - unused
 
     private const int AxisLeftStickX = 0;   // Left joystick X direction    - strafe
     private const int AxisLeftStickY = 1;   // Left joystick Y direction    - forward/reverse
     private const int AxisRightStickX = 2;  // Right joystick X direction   - rotation
-                                            // private const int AxisRightStickY = 5;  // Right joystick Y direction   - unused
+    // private const int AxisRightStickY = 5;  // Right joystick Y direction   - unused
 
     private const int NumButtons = 12;
-    private const int NumAxes = 6;
+    // private const int NumAxes = 6;
+
+    private enum PovBtns                    // Raw values returned for POV DPad
+    {
+      North = 0,
+      NorthEast = 1,
+      East = 2,
+      SouthEast = 3,
+      South = 4,
+      SouthWest = 5,
+      West = 6,
+      NorthWest = 7,
+      None = 8
+    };
 
     // NOTE: DPAD does not work as separate buttons!
 
@@ -52,7 +64,7 @@ namespace BB_2
 
     // Constants - CANDle settings
     private const float Brightness = 0.5F; // CANDle brightness level
-    private const int NumLeds = 8;         // CANDle total number of LEDs
+    private const int NumLeds = 38;         // CANDle total number of LEDs
     private const int OffsetLed = 0;       // CANDle offset of first LED
     private const float Speed = 0.25F;     // CANDle animation speed
     private const int White = 0;           // CANDle white level
@@ -73,7 +85,7 @@ namespace BB_2
     // Global variables
     private static bool _enabled = false;
     private static DateTime _enabledTime;
-    private static Animation[] _animation = {
+    private static readonly Animation[] _animation = {
             null,
             new ColorFlowAnimation(255, 48, 0, White, Speed, NumLeds, ColorFlowAnimation.ColorFlowDirection.Forward, OffsetLed),
             new FireAnimation(Brightness, Speed, NumLeds, 1, 1, false, OffsetLed),
@@ -92,7 +104,7 @@ namespace BB_2
     //
     //  Initialization
     //
-    private static void configDrive()
+    private static void ConfigDrive()
     {
       // Invert all motor directions to match installation
       _rghtFrnt.SetInverted(true);
@@ -101,7 +113,7 @@ namespace BB_2
       _leftRear.SetInverted(true);
     }
 
-    private static void configWrist()
+    private static void ConfigWrist()
     {
       // TODO: configure Talon for Motion Magic on wrist (need gear ratio)
       _wrist.SetInverted(false);
@@ -111,20 +123,19 @@ namespace BB_2
     {
       _candle.ConfigFactoryDefault();
 
-      CANdleConfiguration configAll = new CANdleConfiguration();
-
-      configAll.brightnessScalar = Brightness;
-      configAll.disableWhenLOS = false;
-      configAll.statusLedOffWhenActive = true;
-      configAll.stripType = LEDStripType.RGB;
-      configAll.v5Enabled = true;
-      configAll.vBatOutputMode = VBatOutputMode.Off;
+      CANdleConfiguration configAll = new CANdleConfiguration
+      {
+        brightnessScalar = Brightness,
+        disableWhenLOS = false,
+        statusLedOffWhenActive = true,
+        stripType = LEDStripType.GRB,
+        v5Enabled = true,
+        vBatOutputMode = VBatOutputMode.Off
+      };
       _candle.ConfigAllSettings(configAll, 100);
 
       _candle.ClearAnimation(0);
-
-      // _candle.Animate(_animation[_activeAnimation]);
-      _candle.SetLEDs(255, 48, 0);
+      _candle.SetLEDs(255, 48, 0);  // Orange to indicate disabled
     }
 
     private static void ConfigValves()
@@ -146,11 +157,11 @@ namespace BB_2
     private static void StickDeadband(ref double value)
     {
       if (value < -Deadband)
-        value = (value + Deadband) / (1.0 - Deadband);  /* outside of deadband */
+        value = (value + Deadband) / (1.0 - Deadband);  /* outside of deadband, scale it */
       else if (value > +Deadband)
-        value = (value - Deadband) / (1.0 - Deadband);  /* outside of deadband */
+        value = (value - Deadband) / (1.0 - Deadband);  /* outside of deadband, scale it */
       else
-        value = 0;                                      /* within deadband so zero it */
+        value = 0;                                      /* within deadband, zero it */
     }
 
     //*********************************************************************
@@ -231,6 +242,7 @@ namespace BB_2
     }
 
     //*********************************************************************
+    //*********************************************************************
     //
     //  Detect start button and use it to enable the robot
     //
@@ -247,17 +259,25 @@ namespace BB_2
     }
 
     //*********************************************************************
+    //*********************************************************************
     //
     //  Get button input and operate wrist
     //
+    private static bool IsPovHeld(PovBtns pov)
+    {
+      GameControllerValues _gpadAllValues = new GameControllerValues();
+      _gamepad.GetAllValues(ref _gpadAllValues);
+      return ((PovBtns)_gpadAllValues.pov == pov);
+    }
+
     private static void HandleWristButtons()
     {
       // Use wrist buttons for up and down to control wrist elevation
-      if (_gamepad.GetButton(BtnLeftBumper))
+      if (IsPovHeld(PovBtns.North))
       {
         //_wrist.Set(ControlMode.PercentOutput, 0.5);
       }
-      else if (_gamepad.GetButton(BtnLeftTrigger))
+      else if (IsPovHeld(PovBtns.South))
       {
         //_wrist.Set(ControlMode.PercentOutput, -0.5);
       }
@@ -265,29 +285,9 @@ namespace BB_2
       {
         _wrist.Set(TalonSRXControlMode.PercentOutput, 0);
       }
-
-      if (IsButtonPressed(BtnLeftBumper))
-      {
-        _candle.ClearAnimation(0);
-        _candle.SetLEDs(0, 0, 0, 0, OffsetLed, NumLeds);
-        _activeAnimation += 1;
-        if (_activeAnimation >= _animation.Length)
-          _activeAnimation = 0;
-        if (_animation[_activeAnimation] != null)
-          _candle.Animate(_animation[_activeAnimation]);
-      }
-      else if (IsButtonPressed(BtnLeftTrigger))
-      {
-        _candle.ClearAnimation(0);
-        _candle.SetLEDs(0, 0, 0, 0, OffsetLed, NumLeds);
-        _activeAnimation -= 1;
-        if (_activeAnimation < 0)
-          _activeAnimation = _animation.Length - 1;
-        if (_animation[_activeAnimation] != null)
-          _candle.Animate(_animation[_activeAnimation]);
-      }
     }
 
+    //*********************************************************************
     //*********************************************************************
     //
     //  Handle Valve pulse timing
@@ -311,6 +311,7 @@ namespace BB_2
     }
 
     //*********************************************************************
+    //*********************************************************************
     //
     //   Fire PCM solenoids based on button input
     //
@@ -322,6 +323,37 @@ namespace BB_2
       HandleValvePulse(3, IsButtonPressed(BtnY));
       HandleValvePulse(4, IsButtonPressed(BtnRightBumper));
       HandleValvePulse(5, IsButtonPressed(BtnRightTrigger));
+    }
+
+    //*********************************************************************
+    //*********************************************************************
+    //
+    //  Process CANDle selection
+    //
+    private static void HandleCANdleState()
+    {
+      int currentAnimation = _activeAnimation;
+
+      if (IsButtonPressed(BtnLeftBumper))
+      {
+        _activeAnimation += 1;
+        if (_activeAnimation >= _animation.Length)
+          _activeAnimation = 0;
+      }
+      else if (IsButtonPressed(BtnLeftTrigger))
+      {
+        _activeAnimation -= 1;
+        if (_activeAnimation < 0)
+          _activeAnimation = _animation.Length - 1;
+      }
+
+      if (_activeAnimation != currentAnimation)
+      {
+        _candle.ClearAnimation(0);
+        _candle.SetLEDs(0, 0, 0, 0, OffsetLed, NumLeds);
+        if (_animation[_activeAnimation] != null)
+          _candle.Animate(_animation[_activeAnimation]);
+      }
     }
 
     //*********************************************************************
@@ -376,13 +408,10 @@ namespace BB_2
       {
         GameControllerValues gpadValues = new GameControllerValues();
         _gamepad.GetAllValues(ref gpadValues);
-        float[] a;
-        uint btns;
-        int pov;
 
-        a = gpadValues.axes;
-        btns = gpadValues.btns;
-        pov = gpadValues.pov;
+        float[] a = gpadValues.axes;
+        uint btns = gpadValues.btns;
+        int pov = gpadValues.pov;
 
         //Debug.Print("a0:" + a[0] + " a1:" + a[1] + " a2:" + a[2] + " a3:" + a[3] + " a4:" + a[4] + " a5:" + a[5] +
         //    " btns:" + btns + " pov:" + pov);
@@ -424,10 +453,10 @@ namespace BB_2
     public static void Main()
     {
       // Get the start time for tracking total on time
-      configDrive();
-      configWrist();
-      ConfigCANdle();
+      ConfigDrive();
+      ConfigWrist();
       ConfigValves();
+      ConfigCANdle();
 
       // TODO: Initialize PCM and enable compressor (if needed) Compressor may be automatic
 
@@ -440,6 +469,7 @@ namespace BB_2
         HandleEnableButton();           // handle start button to enable and disable robot
         HandleWristButtons();           // handle buttons that control wrist elevation
         HandleFiringButtons();          // handle buttons that control the firing solenoids
+        HandleCANdleState();            // control CANDel LED patterns
         HandleEnabledState();           // check enable state and process it
         DebugController();              // temporary logging code for printing inputs
 
