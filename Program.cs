@@ -40,6 +40,12 @@ namespace BB_2
     private const int NumButtons = 12;
     // private const int NumAxes = 6;
 
+    private const int PIDINDEX = 0;
+    private const int kCANTimeoutMs = 100;
+    private const int WristAngleMin = 0;                     // Wrist Angle Minimum for Soft Limit
+    private const int WristAngleMax = 45;                    // Wrist Angle Maximum for Soft Limit
+    private const double kWristGearRatio = (62 / 18) * (30 / 12); // Wrist Gear Ratio: (gears: 62:18) (chain: 30:12)
+
     private enum PovBtns                    // Raw values returned for POV DPad
     {
       North = 0,
@@ -116,7 +122,35 @@ namespace BB_2
     private static void ConfigWrist()
     {
       // TODO: configure Talon for Motion Magic on wrist (need gear ratio)
-      _wrist.SetInverted(false);
+      _wrist.SetInverted(true);
+      _wrist.SetSelectedSensorPosition(0, PIDINDEX, kCANTimeoutMs);
+      _wrist.SetSensorPhase(false);
+
+      _wrist.ConfigReverseSoftLimitThreshold((int)DegreestoTalon(WristAngleMin, kWristGearRatio), kCANTimeoutMs);
+      _wrist.ConfigReverseSoftLimitEnable(true, kCANTimeoutMs);
+      _wrist.ConfigForwardSoftLimitThreshold((int)DegreestoTalon(WristAngleMax, kWristGearRatio), kCANTimeoutMs);
+      _wrist.ConfigForwardSoftLimitEnable(true, kCANTimeoutMs);
+    }
+
+    private static double DegreestoTalon(double degrees, double gearRatio)
+    {
+      double ticks = degrees / (360.0 / (gearRatio * 4096.0));
+      return ticks;
+    }
+
+    private static double TalontoDegrees(double counts, double gearRatio)
+    {
+      return counts * (360.0 / (gearRatio * 4096.0));
+    }
+
+    private static double GetCurDegrees()
+    {
+      return TalontoDegrees(_wrist.GetSelectedSensorPosition(PIDINDEX), kWristGearRatio);
+    }
+
+    private static void SetWristDegrees(int degrees)
+    {
+      _wrist.SetSelectedSensorPosition((int)DegreestoTalon(degrees, kWristGearRatio), PIDINDEX, kCANTimeoutMs);
     }
 
     private static void ConfigCANdle()
@@ -275,11 +309,16 @@ namespace BB_2
       // Use wrist buttons for up and down to control wrist elevation
       if (IsPovHeld(PovBtns.North))
       {
-        //_wrist.Set(ControlMode.PercentOutput, 0.5);
+        _wrist.Set(ControlMode.PercentOutput, 0.2);
+        Debug.Print("North held!");
+        Debug.Print("Wrist Position: " + _wrist.GetSelectedSensorPosition(PIDINDEX));
       }
       else if (IsPovHeld(PovBtns.South))
       {
-        //_wrist.Set(ControlMode.PercentOutput, -0.5);
+        _wrist.Set(ControlMode.PercentOutput, -0.2);
+        Debug.Print("South held!");
+        Debug.Print("Wrist Position: " + _wrist.GetSelectedSensorPosition(PIDINDEX));
+
       }
       else
       {
