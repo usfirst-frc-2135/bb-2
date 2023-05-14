@@ -40,11 +40,11 @@ namespace BB_2
     private const int NumButtons = 12;
     // private const int NumAxes = 6;
 
-    private const int PIDINDEX = 0;
-    private const int kCANTimeoutMs = 100;
+    private const int PIDIndex = 0;							 // Wrist Talon PID slot
+    private const int CANTimeoutMs = 100;					 // Wrist Talon CAN timeout
+    private const double WristGearRatio = (62 / 18) * (30 / 12); // Wrist Gear Ratio: (gears: 62:18) (chain: 30:12)
     private const int WristAngleMin = 0;                     // Wrist Angle Minimum for Soft Limit
     private const int WristAngleMax = 45;                    // Wrist Angle Maximum for Soft Limit
-    private const double kWristGearRatio = (62 / 18) * (30 / 12); // Wrist Gear Ratio: (gears: 62:18) (chain: 30:12)
 
     private enum PovBtns                    // Raw values returned for POV DPad
     {
@@ -123,13 +123,13 @@ namespace BB_2
     {
       // TODO: configure Talon for Motion Magic on wrist (need gear ratio)
       _wrist.SetInverted(true);
-      _wrist.SetSelectedSensorPosition(0, PIDINDEX, kCANTimeoutMs);
+      _wrist.SetSelectedSensorPosition(0, PIDIndex, CANTimeoutMs);
       _wrist.SetSensorPhase(false);
 
-      _wrist.ConfigReverseSoftLimitThreshold((int)DegreestoTalon(WristAngleMin, kWristGearRatio), kCANTimeoutMs);
-      _wrist.ConfigReverseSoftLimitEnable(true, kCANTimeoutMs);
-      _wrist.ConfigForwardSoftLimitThreshold((int)DegreestoTalon(WristAngleMax, kWristGearRatio), kCANTimeoutMs);
-      _wrist.ConfigForwardSoftLimitEnable(true, kCANTimeoutMs);
+      _wrist.ConfigReverseSoftLimitThreshold((int)DegreestoTalon(WristAngleMin, WristGearRatio), CANTimeoutMs);
+      _wrist.ConfigReverseSoftLimitEnable(true, CANTimeoutMs);
+      _wrist.ConfigForwardSoftLimitThreshold((int)DegreestoTalon(WristAngleMax, WristGearRatio), CANTimeoutMs);
+      _wrist.ConfigForwardSoftLimitEnable(true, CANTimeoutMs);
     }
 
     private static double DegreestoTalon(double degrees, double gearRatio)
@@ -145,12 +145,12 @@ namespace BB_2
 
     private static double GetCurDegrees()
     {
-      return TalontoDegrees(_wrist.GetSelectedSensorPosition(PIDINDEX), kWristGearRatio);
+      return TalontoDegrees(_wrist.GetSelectedSensorPosition(PIDIndex), WristGearRatio);
     }
 
     private static void SetWristDegrees(int degrees)
     {
-      _wrist.SetSelectedSensorPosition((int)DegreestoTalon(degrees, kWristGearRatio), PIDINDEX, kCANTimeoutMs);
+      _wrist.SetSelectedSensorPosition((int)DegreestoTalon(degrees, WristGearRatio), PIDIndex, CANTimeoutMs);
     }
 
     private static void ConfigCANdle()
@@ -306,24 +306,27 @@ namespace BB_2
 
     private static void HandleWristButtons()
     {
+      float wristOutput = 0.0F;
+
       // Use wrist buttons for up and down to control wrist elevation
       if (IsPovHeld(PovBtns.North))
       {
         _wrist.Set(ControlMode.PercentOutput, 0.2);
-        Debug.Print("North held!");
-        Debug.Print("Wrist Position: " + _wrist.GetSelectedSensorPosition(PIDINDEX));
+        Debug.Print("North held! - Wrist Position: " + _wrist.GetSelectedSensorPosition(PIDIndex));
       }
       else if (IsPovHeld(PovBtns.South))
       {
         _wrist.Set(ControlMode.PercentOutput, -0.2);
-        Debug.Print("South held!");
-        Debug.Print("Wrist Position: " + _wrist.GetSelectedSensorPosition(PIDINDEX));
+        Debug.Print("South held! - Wrist Position: " + _wrist.GetSelectedSensorPosition(PIDIndex));
 
       }
       else
-      {
-        _wrist.Set(TalonSRXControlMode.PercentOutput, 0);
-      }
+        wristOutput = 0.0F;
+
+      if (wristOutput != 0.0)
+        Debug.Print("BB-2 wrist moving: " + ((wristOutput > 0.0) ? "UP" : "DOWN"));
+
+      _wrist.Set(TalonSRXControlMode.PercentOutput, wristOutput);
     }
 
     //*********************************************************************
