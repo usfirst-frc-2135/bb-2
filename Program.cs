@@ -40,11 +40,11 @@ namespace BB_2
     private const int NumButtons = 12;
     // private const int NumAxes = 6;
 
-    private const int PIDIndex = 0;							 // Wrist Talon PID slot
-    private const int CANTimeoutMs = 100;					 // Wrist Talon CAN timeout
-    private const double WristGearRatio = (62 / 18) * (30 / 12); // Wrist Gear Ratio: (gears: 62:18) (chain: 30:12)
-    private const int WristAngleMin = 0;                     // Wrist Angle Minimum for Soft Limit
-    private const int WristAngleMax = 45;                    // Wrist Angle Maximum for Soft Limit
+    private const int EncoderCountsPerRev = 4096;               // Wrist encoder counts for one shaft rotation
+    private const float WristGearRatio = (62 / 18) * (30 / 12); // Wrist Gear Ratio: (gears: 62:18) (chain: 30:12)
+    private const float WristAngleMin = 0.0F;                   // Wrist Angle Minimum for Soft Limit
+    private const float WristAngleMax = 45.0F;                  // Wrist Angle Maximum for Soft Limit
+    private const float WristOutput = 0.2F;                      // Wrist output power
 
     private enum PovBtns                    // Raw values returned for POV DPad
     {
@@ -62,15 +62,14 @@ namespace BB_2
     // NOTE: DPAD does not work as separate buttons!
 
     // Constants - PCM ports
-    private const int PcmPortSignalLight = 7;   // Robot signal light port
     private const int NumValves = 6;
 
     // Constants - Joysticks
-    private const float Deadband = 0.10F;   // Joystick deadband for driving
+    private const float Deadband = 0.10F; // Joystick deadband for driving
 
     // Constants - CANDle settings
     private const float Brightness = 0.5F; // CANDle brightness level
-    private const int NumLeds = 38;         // CANDle total number of LEDs
+    private const int NumLeds = 38;        // CANDle total number of LEDs
     private const int OffsetLed = 0;       // CANDle offset of first LED
     private const float Speed = 0.25F;     // CANDle animation speed
     private const int White = 0;           // CANDle white level
@@ -119,38 +118,37 @@ namespace BB_2
       _leftRear.SetInverted(true);
     }
 
+    private static int WristDegreesToTalon(float degrees, float gearRatio)
+    {
+      return (int)((degrees / 360.0F) * EncoderCountsPerRev * gearRatio);
+    }
+
+    private static float WristTalonToDegrees(int counts, float gearRatio)
+    {
+      return ((float) counts / EncoderCountsPerRev) * 360.0F / gearRatio;
+    }
+
+    private static float GetWristDegrees()
+    {
+      return WristTalonToDegrees(_wrist.GetSelectedSensorPosition(), WristGearRatio);
+    }
+
+    private static void SetWristDegrees(float degrees)
+    {
+      _wrist.SetSelectedSensorPosition(WristDegreesToTalon(degrees, WristGearRatio));
+    }
+
     private static void ConfigWrist()
     {
       // TODO: configure Talon for Motion Magic on wrist (need gear ratio)
       _wrist.SetInverted(true);
-      _wrist.SetSelectedSensorPosition(0, PIDIndex, CANTimeoutMs);
       _wrist.SetSensorPhase(false);
+      _wrist.SetSelectedSensorPosition(0);
 
-      _wrist.ConfigReverseSoftLimitThreshold((int)DegreestoTalon(WristAngleMin, WristGearRatio), CANTimeoutMs);
-      _wrist.ConfigReverseSoftLimitEnable(true, CANTimeoutMs);
-      _wrist.ConfigForwardSoftLimitThreshold((int)DegreestoTalon(WristAngleMax, WristGearRatio), CANTimeoutMs);
-      _wrist.ConfigForwardSoftLimitEnable(true, CANTimeoutMs);
-    }
-
-    private static double DegreestoTalon(double degrees, double gearRatio)
-    {
-      double ticks = degrees / (360.0 / (gearRatio * 4096.0));
-      return ticks;
-    }
-
-    private static double TalontoDegrees(double counts, double gearRatio)
-    {
-      return counts * (360.0 / (gearRatio * 4096.0));
-    }
-
-    private static double GetCurDegrees()
-    {
-      return TalontoDegrees(_wrist.GetSelectedSensorPosition(PIDIndex), WristGearRatio);
-    }
-
-    private static void SetWristDegrees(int degrees)
-    {
-      _wrist.SetSelectedSensorPosition((int)DegreestoTalon(degrees, WristGearRatio), PIDIndex, CANTimeoutMs);
+      _wrist.ConfigReverseSoftLimitThreshold((int)WristDegreesToTalon(WristAngleMin, WristGearRatio));
+      _wrist.ConfigReverseSoftLimitEnable(true);
+      _wrist.ConfigForwardSoftLimitThreshold((int)WristDegreesToTalon(WristAngleMax, WristGearRatio));
+      _wrist.ConfigForwardSoftLimitEnable(true);
     }
 
     private static void ConfigCANdle()
@@ -188,12 +186,12 @@ namespace BB_2
     //  Deadband the joystick input
     //      If value is within +/-deadband range of center, clear it.
     //
-    private static void StickDeadband(ref double value)
+    private static void StickDeadband(ref float value)
     {
       if (value < -Deadband)
-        value = (value + Deadband) / (1.0 - Deadband);  /* outside of deadband, scale it */
+        value = (value + Deadband) / (1.0F - Deadband);  /* outside of deadband, scale it */
       else if (value > +Deadband)
-        value = (value - Deadband) / (1.0 - Deadband);  /* outside of deadband, scale it */
+        value = (value - Deadband) / (1.0F - Deadband);  /* outside of deadband, scale it */
       else
         value = 0;                                      /* within deadband, zero it */
     }
@@ -204,7 +202,7 @@ namespace BB_2
     //      Some prefer to  scale from the max possible value to '1'.
     //      Others prefer to simply cut off if the sum exceeds '1'.
     //
-    private static void DriveNormalize(ref double toNormalize)
+    private static void DriveNormalize(ref float toNormalize)
     {
       if (toNormalize > 1)
         toNormalize = 1;
@@ -223,25 +221,25 @@ namespace BB_2
     //
     private static void HandleDrive()
     {
-      double x = _gamepad.GetAxis(AxisLeftStickX);      // left x: Positive is strafe-right, negative is strafe-left
-      double y = -1 * _gamepad.GetAxis(AxisLeftStickY); // left y: Positive is forward, negative is reverse
-      double turn = _gamepad.GetAxis(AxisRightStickX);  // right x: Positive is turn-right, negative is turn-left
+      float x = _gamepad.GetAxis(AxisLeftStickX);      // left x: Positive is strafe-right, negative is strafe-left
+      float y = -1 * _gamepad.GetAxis(AxisLeftStickY); // left y: Positive is forward, negative is reverse
+      float turn = _gamepad.GetAxis(AxisRightStickX);  // right x: Positive is turn-right, negative is turn-left
 
       if (!_enabled)
       {
-        x = 0.0;
-        y = 0.0;
-        turn = 0.0;
+        x = 0.0F;
+        y = 0.0F;
+        turn = 0.0F;
       }
 
       StickDeadband(ref x);
       StickDeadband(ref y);
       StickDeadband(ref turn);
 
-      double _leftFrnt_throt = y + x + turn;   // left front moves positive for forward, strafe-right, turn-right
-      double _leftRear_throt = y - x + turn;   // left rear moves positive for forward, strafe-left, turn-right
-      double _rghtFrnt_throt = y - x - turn;   // right front moves positive for forward, strafe-left, turn-left
-      double _rghtRear_throt = y + x - turn;   // right rear moves positive for forward, strafe-right, turn-left
+      float _leftFrnt_throt = y + x + turn;   // left front moves positive for forward, strafe-right, turn-right
+      float _leftRear_throt = y - x + turn;   // left rear moves positive for forward, strafe-left, turn-right
+      float _rghtFrnt_throt = y - x - turn;   // right front moves positive for forward, strafe-left, turn-left
+      float _rghtRear_throt = y + x - turn;   // right rear moves positive for forward, strafe-right, turn-left
 
       // normalize here, there a many way to accomplish this, this is a simple solution
       DriveNormalize(ref _leftFrnt_throt);
@@ -311,20 +309,17 @@ namespace BB_2
       // Use wrist buttons for up and down to control wrist elevation
       if (IsPovHeld(PovBtns.North))
       {
-        _wrist.Set(ControlMode.PercentOutput, 0.2);
-        Debug.Print("North held! - Wrist Position: " + _wrist.GetSelectedSensorPosition(PIDIndex));
+        _wrist.Set(ControlMode.PercentOutput, WristOutput);
+        Debug.Print("North held! - Moving UP - Wrist Position: " + _wrist.GetSelectedSensorPosition());
       }
       else if (IsPovHeld(PovBtns.South))
       {
-        _wrist.Set(ControlMode.PercentOutput, -0.2);
-        Debug.Print("South held! - Wrist Position: " + _wrist.GetSelectedSensorPosition(PIDIndex));
+        _wrist.Set(ControlMode.PercentOutput, -WristOutput);
+        Debug.Print("South held! - Moving UP - Wrist Position: " + _wrist.GetSelectedSensorPosition());
 
       }
       else
         wristOutput = 0.0F;
-
-      if (wristOutput != 0.0)
-        Debug.Print("BB-2 wrist moving: " + ((wristOutput > 0.0) ? "UP" : "DOWN"));
 
       _wrist.Set(TalonSRXControlMode.PercentOutput, wristOutput);
     }
@@ -405,7 +400,6 @@ namespace BB_2
     //
     private static void SetSignalLight(bool onState)
     {
-      _pcm.SetSolenoidOutput(PcmPortSignalLight, onState);
       if (onState)
         _candle.SetLEDs(255, 48, 0);
       else
@@ -448,37 +442,37 @@ namespace BB_2
     {
       if (++_debugPrintCount % 50 == 0)
       {
-        GameControllerValues gpadValues = new GameControllerValues();
-        _gamepad.GetAllValues(ref gpadValues);
+        // GameControllerValues gpadValues = new GameControllerValues();
+        // _gamepad.GetAllValues(ref gpadValues);
 
-        float[] a = gpadValues.axes;
-        uint btns = gpadValues.btns;
-        int pov = gpadValues.pov;
+        // float[] a = gpadValues.axes;
+        // uint btns = gpadValues.btns;
+        // int pov = gpadValues.pov;
 
-        //Debug.Print("a0:" + a[0] + " a1:" + a[1] + " a2:" + a[2] + " a3:" + a[3] + " a4:" + a[4] + " a5:" + a[5] +
+        // Debug.Print("a0:" + a[0] + " a1:" + a[1] + " a2:" + a[2] + " a3:" + a[3] + " a4:" + a[4] + " a5:" + a[5] +
         //    " btns:" + btns + " pov:" + pov);
 
         // Get all axis and buttons
-        double axis0 = _gamepad.GetAxis(0);      // left jstick x -1.0 to 1.0
-        double axis1 = _gamepad.GetAxis(1);      // left jstick y 1.0 to -1.0
-        double axis2 = _gamepad.GetAxis(2);      // right jstick x -1.0 to 1.0
-        double axis3 = _gamepad.GetAxis(3);      // (doesn't work)
-        double axis4 = _gamepad.GetAxis(4);      // (doesn't work)
-        double axis5 = _gamepad.GetAxis(5);      // right jstick y 1.0 to -1.0
+        // float axis0 = _gamepad.GetAxis(0);      // left jstick x -1.0 to 1.0
+        // float axis1 = _gamepad.GetAxis(1);      // left jstick y 1.0 to -1.0
+        // float axis2 = _gamepad.GetAxis(2);      // right jstick x -1.0 to 1.0
+        // float axis3 = _gamepad.GetAxis(3);      // (doesn't work)
+        // float axis4 = _gamepad.GetAxis(4);      // (doesn't work)
+        // float axis5 = _gamepad.GetAxis(5);      // right jstick y 1.0 to -1.0
 
-        bool btn1 = _gamepad.GetButton(1);       // x
-        bool btn2 = _gamepad.GetButton(2);       // a
-        bool btn3 = _gamepad.GetButton(3);       // b
-        bool btn4 = _gamepad.GetButton(4);       // y
-        bool btn5 = _gamepad.GetButton(5);       // left bumper
-        bool btn6 = _gamepad.GetButton(6);       // right bumper
-        bool btn7 = _gamepad.GetButton(7);       // left trigger
-        bool btn8 = _gamepad.GetButton(8);       // right trigger
-        bool btn9 = _gamepad.GetButton(9);       // back
-        bool btn10 = _gamepad.GetButton(10);     // start
-        bool btn11 = _gamepad.GetButton(11);     // left jstick
-        bool btn12 = _gamepad.GetButton(12);     // right jstick
-        int pov0 = _gamepad.GetPov();            // POV (doesn't work!)
+        // bool btn1 = _gamepad.GetButton(1);       // x
+        // bool btn2 = _gamepad.GetButton(2);       // a
+        // bool btn3 = _gamepad.GetButton(3);       // b
+        // bool btn4 = _gamepad.GetButton(4);       // y
+        // bool btn5 = _gamepad.GetButton(5);       // left bumper
+        // bool btn6 = _gamepad.GetButton(6);       // right bumper
+        // bool btn7 = _gamepad.GetButton(7);       // left trigger
+        // bool btn8 = _gamepad.GetButton(8);       // right trigger
+        // bool btn9 = _gamepad.GetButton(9);       // back
+        // bool btn10 = _gamepad.GetButton(10);     // start
+        // bool btn11 = _gamepad.GetButton(11);     // left jstick
+        // bool btn12 = _gamepad.GetButton(12);     // right jstick
+        // int pov0 = _gamepad.GetPov();            // POV (doesn't work!)
 
         // Print to console so we can debug them
         //    Debug.Print("a0:" + axis0 + " a1:" + axis1 + " a2:" + axis2 + " a3:" + axis3 + " a4:" + axis4 + " a5:" + axis5 +
