@@ -125,7 +125,7 @@ namespace BB_2
 
     private static float WristTalonToDegrees(int counts, float gearRatio)
     {
-      return ((float) counts / EncoderCountsPerRev) * 360.0F / gearRatio;
+      return ((float)counts / EncoderCountsPerRev) * 360.0F / gearRatio;
     }
 
     private static float GetWristDegrees()
@@ -305,23 +305,17 @@ namespace BB_2
     private static void HandleWristButtons()
     {
       float wristOutput = 0.0F;
+      const float MoveSpeed = 0.1F;
 
       // Use wrist buttons for up and down to control wrist elevation
       if (IsPovHeld(PovBtns.North))
-      {
-        _wrist.Set(ControlMode.PercentOutput, WristOutput);
-        Debug.Print("North held! - Moving UP - Wrist Position: " + _wrist.GetSelectedSensorPosition());
-      }
+        wristOutput = MoveSpeed;
       else if (IsPovHeld(PovBtns.South))
-      {
-        _wrist.Set(ControlMode.PercentOutput, -WristOutput);
-        Debug.Print("South held! - Moving UP - Wrist Position: " + _wrist.GetSelectedSensorPosition());
-
-      }
-      else
-        wristOutput = 0.0F;
+        wristOutput = -MoveSpeed;
 
       _wrist.Set(TalonSRXControlMode.PercentOutput, wristOutput);
+      if (wristOutput != 0.0)
+        Debug.Print("Moving " + ((wristOutput > 0.0) ? "UP" : "DDWN") + " - Wrist Position: " + _wrist.GetSelectedSensorPosition());
     }
 
     //*********************************************************************
