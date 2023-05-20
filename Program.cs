@@ -40,11 +40,13 @@ namespace BB_2
     private const int NumButtons = 12;
     // private const int NumAxes = 6;
 
-    private const int EncoderCountsPerRev = 4096;               // Wrist encoder counts for one shaft rotation
-    private const float WristGearRatio = (62 / 18) * (30 / 12); // Wrist Gear Ratio: (gears: 62:18) (chain: 30:12)
-    private const float WristAngleMin = 0.0F;                   // Wrist Angle Minimum for Soft Limit
-    private const float WristAngleMax = 45.0F;                  // Wrist Angle Maximum for Soft Limit
-    private const float WristOutput = 0.2F;                      // Wrist output power
+    private const int EncoderCountsPerRev = 4096;            // Wrist encoder counts for one shaft rotation
+    private const float WristGearReduction = 62.0F / 18.0F;  // Wrist reduction in gear teeth
+    private const float WristChainReduction = 30.0F / 12.0F; // Wrist reduction in chain sprocket teeth
+    private const float WristGearRatio = WristGearReduction * WristChainReduction; // Wrist Gear Ratio combined
+    private const float WristAngleMin = 0.0F;                // Wrist Angle Minimum for Soft Limit
+    private const float WristAngleMax = 45.0F;               // Wrist Angle Maximum for Soft Limit
+    private const float WristMoveSpeed = 0.2F;               // Wrist output power
 
     private enum PovBtns                    // Raw values returned for POV DPad
     {
@@ -144,6 +146,7 @@ namespace BB_2
       _wrist.SetInverted(true);
       _wrist.SetSensorPhase(false);
       _wrist.SetSelectedSensorPosition(0);
+      _wrist.SetNeutralMode(NeutralMode.Brake);
 
       _wrist.ConfigReverseSoftLimitThreshold((int)WristDegreesToTalon(WristAngleMin, WristGearRatio));
       _wrist.ConfigReverseSoftLimitEnable(true);
@@ -305,17 +308,21 @@ namespace BB_2
     private static void HandleWristButtons()
     {
       float wristOutput = 0.0F;
-      const float MoveSpeed = 0.1F;
 
       // Use wrist buttons for up and down to control wrist elevation
       if (IsPovHeld(PovBtns.North))
-        wristOutput = MoveSpeed;
+        wristOutput = WristMoveSpeed;
       else if (IsPovHeld(PovBtns.South))
-        wristOutput = -MoveSpeed;
+        wristOutput = -WristMoveSpeed;
 
       _wrist.Set(TalonSRXControlMode.PercentOutput, wristOutput);
       if (wristOutput != 0.0)
-        Debug.Print("Moving " + ((wristOutput > 0.0) ? "UP" : "DDWN") + " - Wrist Position: " + _wrist.GetSelectedSensorPosition());
+      {
+        int wristPosition = _wrist.GetSelectedSensorPosition();
+        Debug.Print("Wrist: Moving " + ((wristOutput > 0.0) ? "UP" : "DDWN") 
+          + " - Position: " + wristPosition 
+          + " Degrees " + WristTalonToDegrees(wristPosition, WristGearRatio));
+      }
     }
 
     //*********************************************************************
