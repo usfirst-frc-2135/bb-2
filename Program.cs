@@ -15,18 +15,18 @@ namespace BB_2
 {
   public class Program
   {
-    // Constants
-    private const int ThreadLoopTime = 10;  // loop time in msec
+    // Constants - System
+    private const int ThreadLoopTime = 5;   // loop time in msec
 
     // Constants - Create gamepad instance
-    private const int BtnX = 1;             // X button             - fire
-    private const int BtnA = 2;             // A button             - fire
-    private const int BtnB = 3;             // B button             - fire
-    private const int BtnY = 4;             // Y button             - fire
+    private const int BtnX = 1;             // X button             - fire barrel 4
+    private const int BtnA = 2;             // A button             - fire barrel 3
+    private const int BtnB = 3;             // B button             - fire barrel 2
+    private const int BtnY = 4;             // Y button             - fire barrel 1
     private const int BtnLeftBumper = 5;    // Left Bumper          - wrist up
     private const int BtnLeftTrigger = 7;   // Left Trigger         - wrist down
-    private const int BtnRightBumper = 6;   // Right Bumper         - fire
-    private const int BtnRightTrigger = 8;  // Right Trigger        - fire
+    private const int BtnRightBumper = 6;   // Right Bumper         - fire barrel 5
+    private const int BtnRightTrigger = 8;  // Right Trigger        - fire barrel 6
     // private const int BtnBack = 9;          // Back button          - unused
     private const int BtnStart = 10;        // Start button         - enable robot
     // private const int BtnLeftStick = 11;    // Left joystick press  - unused
@@ -40,15 +40,8 @@ namespace BB_2
     private const int NumButtons = 12;
     // private const int NumAxes = 6;
 
-    private const int EncoderCountsPerRev = 4096;            // Wrist encoder counts for one shaft rotation
-    private const float WristGearReduction = 62.0F / 18.0F;  // Wrist reduction in gear teeth
-    private const float WristChainReduction = 30.0F / 12.0F; // Wrist reduction in chain sprocket teeth
-    private const float WristGearRatio = WristGearReduction * WristChainReduction; // Wrist Gear Ratio combined
-    private const float WristAngleMin = 0.0F;                // Wrist Angle Minimum for Soft Limit
-    private const float WristAngleMax = 45.0F;               // Wrist Angle Maximum for Soft Limit
-    private const float WristMoveSpeed = 0.2F;               // Wrist output power
-
-    private enum PovBtns                    // Raw values returned for POV DPad
+    // NOTE: DPAD does not work using getPOV() must use getAllValues()!
+    private enum PovBtns                    // Raw values returned for POV DPad relative to compass direction
     {
       North = 0,
       NorthEast = 1,
@@ -61,26 +54,50 @@ namespace BB_2
       None = 8
     };
 
-    // NOTE: DPAD does not work as separate buttons!
+
+    // Mechanical constants
+    private const int EncoderCountsPerRev = 4096;            // Wrist encoder counts for one shaft rotation
+    private const float WristGearReduction = 62.0F / 18.0F;  // Wrist reduction in gear teeth
+    private const float WristChainReduction = 30.0F / 12.0F; // Wrist reduction in chain sprocket teeth
+    private const float WristGearRatio = WristGearReduction * WristChainReduction; // Wrist Gear Ratio combined
+    private const float WristAngleMin = 0.0F;                // Wrist Angle Minimum for Soft Limit
+    private const float WristAngleMax = 45.0F;               // Wrist Angle Maximum for Soft Limit
+    private const float WristMoveSpeed = 0.2F;               // Wrist output power
+
+    private const float ShooterValveOpenTime = 60.0F;        // Duration of shooter value open pulse
+
+   // Color constants for CANdle
+    private struct ColorGRB {
+      public int g;
+      public int r;
+      public int b;
+    };
+
+    private static ColorGRB Red    = new ColorGRB { g = 0,   r = 255, b = 0   };
+    private static ColorGRB Orange = new ColorGRB { g = 255, r = 48,  b = 0   };
+    private static ColorGRB Green  = new ColorGRB { g = 255, r = 0,   b = 0   };
+    private static ColorGRB Blue   = new ColorGRB { g = 0,   r = 0,   b = 255 };
+    private static ColorGRB White  = new ColorGRB { g = 255, r = 255, b = 255 };
+    private static ColorGRB Off    = new ColorGRB { g = 0,   r = 0,   b = 0   };
 
     // Constants - PCM ports
-    private const int NumValves = 6;
+    private const int ShooterNumValves = 6;
 
     // Constants - Joysticks
     private const float Deadband = 0.10F; // Joystick deadband for driving
 
     // Constants - CANDle settings
-    private const float Brightness = 0.5F; // CANDle brightness level
-    private const int NumLeds = 38;        // CANDle total number of LEDs
-    private const int OffsetLed = 0;       // CANDle offset of first LED
-    private const float Speed = 0.25F;     // CANDle animation speed
-    private const int White = 0;           // CANDle white level
-    private const int LedPeriodMs = 500;   // LED flashing period in msec
+    private const float Brightness = 0.75F; // CANDle brightness level
+    private const int NumLeds = 38;         // CANDle total number of LEDs
+    private const int OffsetLed = 0;        // CANDle offset of first LED
+    private const float Speed = 0.5F;       // CANDle animation speed
+    private const int WhiteValue = 0;       // CANDle white level
+    private const int LedPeriodMs = 500;    // LED flashing period in msec
 
     // Static objects
     private static readonly LogitechGamepad _gamepad = new LogitechGamepad(UsbHostDevice.GetInstance(), 0);
 
-    // Create four drive talons and PCM on CAN bus
+    // Create four drive talons, PCM, and CANdle on CAN bus
     private static readonly TalonSRX _leftFrnt = new TalonSRX(1);
     private static readonly TalonSRX _leftRear = new TalonSRX(2);
     private static readonly TalonSRX _rghtFrnt = new TalonSRX(3);
@@ -94,15 +111,15 @@ namespace BB_2
     private static DateTime _enabledTime;
     private static readonly Animation[] _animation = {
             null,
-            new ColorFlowAnimation(255, 48, 0, White, Speed, NumLeds, ColorFlowAnimation.ColorFlowDirection.Forward, OffsetLed),
-            new FireAnimation(Brightness, Speed, NumLeds, 1, 1, false, OffsetLed),
-            new LarsonAnimation(128, 128, 128, White, Speed, NumLeds, LarsonAnimation.LarsonBounceMode.Front, 2, OffsetLed),
+            new ColorFlowAnimation(Orange.r, Orange.g, Orange.b, WhiteValue, Speed, NumLeds, ColorFlowAnimation.ColorFlowDirection.Forward, OffsetLed),
+            new FireAnimation(Brightness, Speed, NumLeds, 1.0F, 1.0F, false, OffsetLed),
+            new LarsonAnimation(White.r, White.g, White.b, WhiteValue, Speed, NumLeds, LarsonAnimation.LarsonBounceMode.Front, 2, OffsetLed),
             new RainbowAnimation(Brightness, Speed, NumLeds, false, OffsetLed),
             new RgbFadeAnimation(Brightness, Speed, NumLeds, OffsetLed),
-            new SingleFadeAnimation(255, 48, 0, White, Speed, NumLeds, OffsetLed),
-            new StrobeAnimation(255, 48, 0, White, Speed, NumLeds, OffsetLed),
-            new TwinkleAnimation(255, 48, 0, White, Speed, NumLeds, TwinkleAnimation.TwinklePercent.Percent64, OffsetLed),
-            new TwinkleOffAnimation(255, 48, 0, White, Speed, NumLeds, TwinkleOffAnimation.TwinkleOffPercent.Percent64, OffsetLed)
+            new SingleFadeAnimation(Orange.r, Orange.g, Orange.b, WhiteValue, Speed, NumLeds, OffsetLed),
+            new StrobeAnimation(Orange.r, Orange.g, Orange.b, WhiteValue, Speed, NumLeds, OffsetLed),
+            new TwinkleAnimation(Orange.r, Orange.g, Orange.b, WhiteValue, Speed, NumLeds, TwinkleAnimation.TwinklePercent.Percent64, OffsetLed),
+            new TwinkleOffAnimation(Orange.r, Orange.g, Orange.b, WhiteValue, Speed, NumLeds, TwinkleOffAnimation.TwinkleOffPercent.Percent64, OffsetLed)
         };
     private static int _activeAnimation = 0;
 
@@ -113,7 +130,7 @@ namespace BB_2
     //
     private static void ConfigDrive()
     {
-      // Invert all motor directions to match installation
+      // Invert all motor directions to match mechanical gearbox installation
       _rghtFrnt.SetInverted(true);
       _rghtRear.SetInverted(true);
       _leftFrnt.SetInverted(true);
@@ -142,7 +159,7 @@ namespace BB_2
 
     private static void ConfigWrist()
     {
-      // TODO: configure Talon for Motion Magic on wrist (need gear ratio)
+      // Match mechanical installation for gearbox and motor
       _wrist.SetInverted(true);
       _wrist.SetSensorPhase(false);
       _wrist.SetSelectedSensorPosition(0);
@@ -160,27 +177,28 @@ namespace BB_2
 
       CANdleConfiguration configAll = new CANdleConfiguration
       {
-        brightnessScalar = Brightness,
-        disableWhenLOS = false,
-        statusLedOffWhenActive = true,
-        stripType = LEDStripType.GRB,
-        v5Enabled = true,
-        vBatOutputMode = VBatOutputMode.Off
+        brightnessScalar = Brightness,      // Initialize LED brightness
+        disableWhenLOS = false,             // Don't disable LEDs when "loss of signal"
+        statusLedOffWhenActive = true,      // Turn off the CAN status LED when LEDs are set
+        stripType = LEDStripType.GRB,       // Order of LEDs in extra strip
+        v5Enabled = true,                   // Enable 5.0V output to power extra strip
+        vBatOutputMode = VBatOutputMode.Off // Disable VBat (12.0V) since not used
       };
       _candle.ConfigAllSettings(configAll, 100);
 
       _candle.ClearAnimation(0);
-      _candle.SetLEDs(255, 48, 0);  // Orange to indicate disabled
+      _candle.SetLEDs(Orange.r, Orange.g, Orange.b); // Initial color
     }
 
     private static void ConfigValves()
     {
-      HandleValvePulse(0, false);
-      HandleValvePulse(1, false);
-      HandleValvePulse(2, false);
-      HandleValvePulse(3, false);
-      HandleValvePulse(4, false);
-      HandleValvePulse(5, false);
+      // Initialize shooter control valves
+      HandleShooterValvePulse(0, false);
+      HandleShooterValvePulse(1, false);
+      HandleShooterValvePulse(2, false);
+      HandleShooterValvePulse(3, false);
+      HandleShooterValvePulse(4, false);
+      HandleShooterValvePulse(5, false);
     }
 
     //*********************************************************************
@@ -196,7 +214,7 @@ namespace BB_2
       else if (value > +Deadband)
         value = (value - Deadband) / (1.0F - Deadband);  /* outside of deadband, scale it */
       else
-        value = 0;                                      /* within deadband, zero it */
+        value = 0;                                       /* within deadband, zero it */
     }
 
     //*********************************************************************
@@ -224,9 +242,9 @@ namespace BB_2
     //
     private static void HandleDrive()
     {
-      float x = _gamepad.GetAxis(AxisLeftStickX);      // left x: Positive is strafe-right, negative is strafe-left
-      float y = -1 * _gamepad.GetAxis(AxisLeftStickY); // left y: Positive is forward, negative is reverse
-      float turn = _gamepad.GetAxis(AxisRightStickX);  // right x: Positive is turn-right, negative is turn-left
+      float x = _gamepad.GetAxis(AxisLeftStickX);         // left x: Positive is strafe-right, negative is strafe-left
+      float y = -1.0F * _gamepad.GetAxis(AxisLeftStickY); // left y: Positive is forward, negative is reverse
+      float turn = _gamepad.GetAxis(AxisRightStickX);     // right x: Positive is turn-right, negative is turn-left
 
       if (!_enabled)
       {
@@ -244,7 +262,7 @@ namespace BB_2
       float _rghtFrnt_throt = y - x - turn;   // right front moves positive for forward, strafe-left, turn-left
       float _rghtRear_throt = y + x - turn;   // right rear moves positive for forward, strafe-right, turn-left
 
-      // normalize here, there a many way to accomplish this, this is a simple solution
+      // Normalize here (limit to range -1.0 .. 1.0)
       DriveNormalize(ref _leftFrnt_throt);
       DriveNormalize(ref _leftRear_throt);
       DriveNormalize(ref _rghtFrnt_throt);
@@ -260,7 +278,7 @@ namespace BB_2
     //*********************************************************************
     //*********************************************************************
     //
-    //  Detect button pressed - return once when first depressed
+    //  Detect button pressed - return true only when first depressed
     //
     public static bool[] btnSave = new bool[NumButtons] { false, false, false, false, false, false, false, false, false, false, false, false };
 
@@ -330,16 +348,17 @@ namespace BB_2
     //
     //  Handle Valve pulse timing
     //
-    public static DateTime[] openTime = new DateTime[NumValves] { DateTime.MinValue, DateTime.MinValue, DateTime.MinValue, DateTime.MinValue, DateTime.MinValue, DateTime.MinValue };
+    public static DateTime[] openTime = new DateTime[ShooterNumValves] { DateTime.MinValue, DateTime.MinValue, DateTime.MinValue, DateTime.MinValue, DateTime.MinValue, DateTime.MinValue };
 
-    private static bool HandleValvePulse(int valveIdx, bool startPulse)
+    private static bool HandleShooterValvePulse(int valveIdx, bool startPulse)
     {
       bool valveOpen = false;
 
       if ((openTime[valveIdx] == DateTime.MinValue) && startPulse)
         openTime[valveIdx] = DateTime.Now;
 
-      if ((openTime[valveIdx] != DateTime.MinValue) && (DateTime.Now.Subtract(openTime[valveIdx]).Milliseconds < 250))
+      if ((openTime[valveIdx] != DateTime.MinValue) && 
+          (DateTime.Now.Subtract(openTime[valveIdx]).Milliseconds < ShooterValveOpenTime))
         valveOpen = true;
       else
         openTime[valveIdx] = DateTime.MinValue;
@@ -351,16 +370,16 @@ namespace BB_2
     //*********************************************************************
     //*********************************************************************
     //
-    //   Fire PCM solenoids based on button input
+    //   Fire PCM solenoids based on button input - barrel numbers are clockwise from rear of robot
     //
     private static void HandleFiringButtons()
     {
-      HandleValvePulse(0, IsButtonPressed(BtnX));
-      HandleValvePulse(1, IsButtonPressed(BtnA));
-      HandleValvePulse(2, IsButtonPressed(BtnB));
-      HandleValvePulse(3, IsButtonPressed(BtnY));
-      HandleValvePulse(4, IsButtonPressed(BtnRightBumper));
-      HandleValvePulse(5, IsButtonPressed(BtnRightTrigger));
+      HandleShooterValvePulse(0, IsButtonPressed(BtnY));            // Barrel 1
+      HandleShooterValvePulse(1, IsButtonPressed(BtnB));            // Barrel 2
+      HandleShooterValvePulse(2, IsButtonPressed(BtnA));            // Barrel 3
+      HandleShooterValvePulse(3, IsButtonPressed(BtnX));            // Barrel 4
+      HandleShooterValvePulse(4, IsButtonPressed(BtnRightBumper));  // Barrel 5
+      HandleShooterValvePulse(5, IsButtonPressed(BtnRightTrigger)); // Barrel 6
     }
 
     //*********************************************************************
@@ -402,9 +421,9 @@ namespace BB_2
     private static void SetSignalLight(bool onState)
     {
       if (onState)
-        _candle.SetLEDs(255, 48, 0);
+        _candle.SetLEDs(Orange.r, Orange.g, Orange.b);
       else
-        _candle.SetLEDs(0, 0, 0);
+        _candle.SetLEDs(Off.r, Off.g, Off.b);
     }
 
     private static void HandleEnabledState()
@@ -422,14 +441,20 @@ namespace BB_2
         if (onTime.Seconds > 180)
           _enabled = false;
 
-        if (_animation[_activeAnimation] == null)
+        if (_animation [_activeAnimation] == null)
+        {
+          _candle.ClearAnimation(0);
           if (onTime.Milliseconds > LedPeriodMs)
             SetSignalLight(true);
           else
             SetSignalLight(false);
+        }
       }
-      else
-        SetSignalLight(true);
+      else // Set to solid orange when disabled
+      {
+        _candle.ClearAnimation(0);
+        _candle.SetLEDs(Orange.r, Orange.g, Orange.b);
+      }
     }
 
     //*********************************************************************
