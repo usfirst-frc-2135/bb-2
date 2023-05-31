@@ -16,7 +16,7 @@ namespace BB_2
   public class Program
   {
     // Constants - System
-    private const int ThreadLoopTime = 5;   // loop time in msec
+    private const int ThreadLoopTime = 10;  // loop time in msec
 
     // Constants - Create gamepad instance
     private const int BtnX = 1;             // X button             - fire barrel 4
@@ -66,25 +66,27 @@ namespace BB_2
 
     private const float ShooterValveOpenTime = 60.0F;        // Duration of shooter value open pulse
 
-   // Color constants for CANdle
-    private struct ColorGRB {
+    // Color constants for CANdle
+    private struct ColorGRB
+    {
       public int g;
       public int r;
       public int b;
     };
 
-    private static ColorGRB Red    = new ColorGRB { g = 0,   r = 255, b = 0   };
-    private static ColorGRB Orange = new ColorGRB { g = 255, r = 48,  b = 0   };
-    private static ColorGRB Green  = new ColorGRB { g = 255, r = 0,   b = 0   };
-    private static ColorGRB Blue   = new ColorGRB { g = 0,   r = 0,   b = 255 };
-    private static ColorGRB White  = new ColorGRB { g = 255, r = 255, b = 255 };
-    private static ColorGRB Off    = new ColorGRB { g = 0,   r = 0,   b = 0   };
+    private static ColorGRB Red    = new ColorGRB { r = 255, g = 0,   b = 0 };
+    private static ColorGRB Orange = new ColorGRB { r = 255, g = 48,  b = 0 };
+    private static ColorGRB Green  = new ColorGRB { r = 0,   g = 255, b = 0 };
+    private static ColorGRB Blue   = new ColorGRB { r = 0,   g = 0,   b = 255 };
+    private static ColorGRB Purple = new ColorGRB { r = 128, g = 0,   b = 128 };
+    private static ColorGRB White  = new ColorGRB { r = 255, g = 255, b = 255 };
+    private static ColorGRB Off    = new ColorGRB { r = 0,   g = 0,   b = 0 };
 
     // Constants - PCM ports
     private const int ShooterNumValves = 6;
 
     // Constants - Joysticks
-    private const float Deadband = 0.10F; // Joystick deadband for driving
+    private const float Deadband = 0.10F;   // Joystick deadband for driving
 
     // Constants - CANDle settings
     private const float Brightness = 0.75F; // CANDle brightness level
@@ -110,18 +112,17 @@ namespace BB_2
     private static bool _enabled = false;
     private static DateTime _enabledTime;
     private static readonly Animation[] _animation = {
-            null,
-            new ColorFlowAnimation(Orange.r, Orange.g, Orange.b, WhiteValue, Speed, NumLeds, ColorFlowAnimation.ColorFlowDirection.Forward, OffsetLed),
+            new SingleFadeAnimation(Green.r, Green.g, Green.b, WhiteValue, Speed, NumLeds, OffsetLed), // Disabled animation
+            new ColorFlowAnimation(Blue.r, Blue.g, Blue.b, WhiteValue, Speed, NumLeds, ColorFlowAnimation.ColorFlowDirection.Forward, OffsetLed),
             new FireAnimation(Brightness, Speed, NumLeds, 1.0F, 1.0F, false, OffsetLed),
-            new LarsonAnimation(White.r, White.g, White.b, WhiteValue, Speed, NumLeds, LarsonAnimation.LarsonBounceMode.Front, 2, OffsetLed),
+            new LarsonAnimation(Red.r, Red.g, Red.b, WhiteValue, Speed, NumLeds, LarsonAnimation.LarsonBounceMode.Front, 4, OffsetLed),
             new RainbowAnimation(Brightness, Speed, NumLeds, false, OffsetLed),
             new RgbFadeAnimation(Brightness, Speed, NumLeds, OffsetLed),
-            new SingleFadeAnimation(Orange.r, Orange.g, Orange.b, WhiteValue, Speed, NumLeds, OffsetLed),
-            new StrobeAnimation(Orange.r, Orange.g, Orange.b, WhiteValue, Speed, NumLeds, OffsetLed),
-            new TwinkleAnimation(Orange.r, Orange.g, Orange.b, WhiteValue, Speed, NumLeds, TwinkleAnimation.TwinklePercent.Percent64, OffsetLed),
-            new TwinkleOffAnimation(Orange.r, Orange.g, Orange.b, WhiteValue, Speed, NumLeds, TwinkleOffAnimation.TwinkleOffPercent.Percent64, OffsetLed)
+            new StrobeAnimation(Orange.r, Orange.g, Orange.b, WhiteValue, Speed/10, NumLeds, OffsetLed),
+            new TwinkleAnimation(White.r, White.g, White.b, WhiteValue, Speed, NumLeds, TwinkleAnimation.TwinklePercent.Percent64, OffsetLed),
+            new TwinkleOffAnimation(Purple.r, Purple.g, Purple.b, WhiteValue, Speed, NumLeds, TwinkleOffAnimation.TwinkleOffPercent.Percent64, OffsetLed)
         };
-    private static int _activeAnimation = 0;
+    private static int _activeAnimation = 3; // Default animation for enabled state
 
     //*********************************************************************
     //*********************************************************************
@@ -184,10 +185,10 @@ namespace BB_2
         v5Enabled = true,                   // Enable 5.0V output to power extra strip
         vBatOutputMode = VBatOutputMode.Off // Disable VBat (12.0V) since not used
       };
-      _candle.ConfigAllSettings(configAll, 100);
+      _candle.ConfigAllSettings(configAll);
 
       _candle.ClearAnimation(0);
-      _candle.SetLEDs(Orange.r, Orange.g, Orange.b); // Initial color
+      _candle.Animate(_animation[0]);       // Disabled animation is zero
     }
 
     private static void ConfigValves()
@@ -291,24 +292,8 @@ namespace BB_2
         result = true;
 
       btnSave[buttonIdx] = btnState;
-      return result;
-    }
 
-    //*********************************************************************
-    //*********************************************************************
-    //
-    //  Detect start button and use it to enable the robot
-    //
-    private static void HandleEnableButton()
-    {
-      // Enable button is pressed, enable and capture start time
-      if (IsButtonPressed(BtnStart))
-      {
-        _enabled = !_enabled;
-        if (_enabled)
-          _enabledTime = DateTime.Now;
-        Debug.Print("BB-2 is now: " + ((_enabled) ? "ENABLED" : "DISABLED") + " at " + DateTime.Now + " seconds");
-      }
+      return result;
     }
 
     //*********************************************************************
@@ -319,7 +304,9 @@ namespace BB_2
     private static bool IsPovHeld(PovBtns pov)
     {
       GameControllerValues _gpadAllValues = new GameControllerValues();
+
       _gamepad.GetAllValues(ref _gpadAllValues);
+
       return ((PovBtns)_gpadAllValues.pov == pov);
     }
 
@@ -328,17 +315,20 @@ namespace BB_2
       float wristOutput = 0.0F;
 
       // Use wrist buttons for up and down to control wrist elevation
-      if (IsPovHeld(PovBtns.North))
-        wristOutput = WristMoveSpeed;
-      else if (IsPovHeld(PovBtns.South))
-        wristOutput = -WristMoveSpeed;
+      if (_enabled)
+      {
+        if (IsPovHeld(PovBtns.North))
+          wristOutput = WristMoveSpeed;
+        else if (IsPovHeld(PovBtns.South))
+          wristOutput = -WristMoveSpeed;
+      }
 
       _wrist.Set(TalonSRXControlMode.PercentOutput, wristOutput);
-      if (wristOutput != 0.0)
+      if (wristOutput != 0.0F)
       {
         int wristPosition = _wrist.GetSelectedSensorPosition();
-        Debug.Print("Wrist: Moving " + ((wristOutput > 0.0) ? "UP" : "DDWN") 
-          + " - Position: " + wristPosition 
+        Debug.Print("Wrist: Moving " + ((wristOutput > 0.0) ? "UP" : "DDWN")
+          + " - Position: " + wristPosition
           + " Degrees " + WristTalonToDegrees(wristPosition, WristGearRatio));
       }
     }
@@ -346,9 +336,9 @@ namespace BB_2
     //*********************************************************************
     //*********************************************************************
     //
-    //  Handle Valve pulse timing
+    //  Handle Valve pulse timing (minValue means timer is not in use)
     //
-    public static DateTime[] openTime = new DateTime[ShooterNumValves] { DateTime.MinValue, DateTime.MinValue, DateTime.MinValue, DateTime.MinValue, DateTime.MinValue, DateTime.MinValue };
+    private static DateTime[] openTime = new DateTime[ShooterNumValves] { DateTime.MinValue, DateTime.MinValue, DateTime.MinValue, DateTime.MinValue, DateTime.MinValue, DateTime.MinValue };
 
     private static bool HandleShooterValvePulse(int valveIdx, bool startPulse)
     {
@@ -357,7 +347,7 @@ namespace BB_2
       if ((openTime[valveIdx] == DateTime.MinValue) && startPulse)
         openTime[valveIdx] = DateTime.Now;
 
-      if ((openTime[valveIdx] != DateTime.MinValue) && 
+      if ((openTime[valveIdx] != DateTime.MinValue) &&
           (DateTime.Now.Subtract(openTime[valveIdx]).Milliseconds < ShooterValveOpenTime))
         valveOpen = true;
       else
@@ -389,72 +379,70 @@ namespace BB_2
     //
     private static void HandleCANdleState()
     {
-      int currentAnimation = _activeAnimation;
+      int requestedAnimation = _activeAnimation; // Default request to current animation
 
       if (IsButtonPressed(BtnLeftBumper))
       {
-        _activeAnimation += 1;
-        if (_activeAnimation >= _animation.Length)
-          _activeAnimation = 0;
+        requestedAnimation += 1;
+        if (requestedAnimation >= _animation.Length)
+          requestedAnimation = 1;
       }
       else if (IsButtonPressed(BtnLeftTrigger))
       {
-        _activeAnimation -= 1;
-        if (_activeAnimation < 0)
-          _activeAnimation = _animation.Length - 1;
+        requestedAnimation -= 1;
+        if (requestedAnimation < 1)
+          requestedAnimation = _animation.Length - 1;
       }
 
-      if (_activeAnimation != currentAnimation)
+      if (_enabled && (requestedAnimation != _activeAnimation))
       {
+        _activeAnimation = requestedAnimation;
         _candle.ClearAnimation(0);
-        _candle.SetLEDs(0, 0, 0, 0, OffsetLed, NumLeds);
-        if (_animation[_activeAnimation] != null)
-          _candle.Animate(_animation[_activeAnimation]);
+        _candle.Animate(_animation[_activeAnimation]);
       }
     }
 
     //*********************************************************************
     //*********************************************************************
     //
-    //  Process enabled state operation of robot
+    //  Detect start button and use it to enable the robot
     //
-    private static void SetSignalLight(bool onState)
-    {
-      if (onState)
-        _candle.SetLEDs(Orange.r, Orange.g, Orange.b);
-      else
-        _candle.SetLEDs(Off.r, Off.g, Off.b);
-    }
-
     private static void HandleEnabledState()
     {
+      bool enableRequest = _enabled;  // Default request to current enable state
+      TimeSpan onTime = DateTime.Now.Subtract(_enabledTime);
+
+      // Enable button is pressed, request a state toggle
+      if (IsButtonPressed(BtnStart))
+        enableRequest = !_enabled;
+
+      // Gamepad disconnect, disable
       if (_gamepad.GetConnectionStatus() != CTRE.Phoenix.UsbDeviceConnection.Connected)
-        _enabled = false;
+        enableRequest = false;
+
+      // Timeout if enabled for a long time
+      if (_enabled && ((onTime.Minutes * 60 + onTime.Seconds) > 180))
+          enableRequest = false;
+
+      // If enabled request is a change from previous state, update state
+      if (enableRequest != _enabled)
+      {
+        _enabled = enableRequest;
+
+        _candle.ClearAnimation(0);
+        if (_enabled)
+        {
+          _enabledTime = DateTime.Now;
+          _candle.Animate(_animation[_activeAnimation]);
+        }
+        else
+          _candle.Animate(_animation[0]);
+
+        Debug.Print("BB-2 is now: " + ((_enabled) ? "ENABLED" : "DISABLED") + " at " + DateTime.Now + " seconds");
+      }
 
       if (_enabled)
-      {
-        // this lets the drive motors, wrist motor, and PCM take commands
         Watchdog.Feed();
-
-        TimeSpan onTime = DateTime.Now.Subtract(_enabledTime);
-
-        if (onTime.Seconds > 180)
-          _enabled = false;
-
-        if (_animation [_activeAnimation] == null)
-        {
-          _candle.ClearAnimation(0);
-          if (onTime.Milliseconds > LedPeriodMs)
-            SetSignalLight(true);
-          else
-            SetSignalLight(false);
-        }
-      }
-      else // Set to solid orange when disabled
-      {
-        _candle.ClearAnimation(0);
-        _candle.SetLEDs(Orange.r, Orange.g, Orange.b);
-      }
     }
 
     //*********************************************************************
@@ -528,7 +516,6 @@ namespace BB_2
       while (true)
       {
         HandleDrive();                  // use joysticks to run drive motors
-        HandleEnableButton();           // handle start button to enable and disable robot
         HandleWristButtons();           // handle buttons that control wrist elevation
         HandleFiringButtons();          // handle buttons that control the firing solenoids
         HandleCANdleState();            // control CANDel LED patterns
