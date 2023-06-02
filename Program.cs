@@ -62,7 +62,7 @@ namespace BB_2
     private const float WristGearRatio = WristGearReduction * WristChainReduction; // Wrist Gear Ratio combined
     private const float WristAngleMin = 0.0F;                // Wrist Angle Minimum for Soft Limit
     private const float WristAngleMax = 45.0F;               // Wrist Angle Maximum for Soft Limit
-    private const float WristMoveSpeed = 0.2F;               // Wrist output power
+    private const float WristMoveSpeed = 0.35F;               // Wrist output power
 
     private const float ShooterValveOpenTime = 60.0F;        // Duration of shooter value open pulse
 
@@ -94,7 +94,6 @@ namespace BB_2
     private const int OffsetLed = 0;        // CANDle offset of first LED
     private const float Speed = 0.5F;       // CANDle animation speed
     private const int WhiteValue = 0;       // CANDle white level
-    private const int LedPeriodMs = 500;    // LED flashing period in msec
 
     // Static objects
     private static readonly LogitechGamepad _gamepad = new LogitechGamepad(UsbHostDevice.GetInstance(), 0);
@@ -118,7 +117,7 @@ namespace BB_2
             new LarsonAnimation(Red.r, Red.g, Red.b, WhiteValue, Speed, NumLeds, LarsonAnimation.LarsonBounceMode.Front, 4, OffsetLed),
             new RainbowAnimation(Brightness, Speed, NumLeds, false, OffsetLed),
             new RgbFadeAnimation(Brightness, Speed, NumLeds, OffsetLed),
-            new StrobeAnimation(Orange.r, Orange.g, Orange.b, WhiteValue, Speed/10, NumLeds, OffsetLed),
+            new StrobeAnimation(Red.r, Red.g, Red.b, WhiteValue, Speed/10, NumLeds, OffsetLed),
             new TwinkleAnimation(White.r, White.g, White.b, WhiteValue, Speed, NumLeds, TwinkleAnimation.TwinklePercent.Percent64, OffsetLed),
             new TwinkleOffAnimation(Purple.r, Purple.g, Purple.b, WhiteValue, Speed, NumLeds, TwinkleOffAnimation.TwinkleOffPercent.Percent64, OffsetLed)
         };
