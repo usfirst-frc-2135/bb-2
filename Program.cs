@@ -75,12 +75,12 @@ namespace BB_2
     };
 
     private static ColorGRB Red    = new ColorGRB { r = 255, g = 0,   b = 0 };
-    private static ColorGRB Orange = new ColorGRB { r = 255, g = 48,  b = 0 };
+    //private static ColorGRB Orange = new ColorGRB { r = 255, g = 48,  b = 0 };
     private static ColorGRB Green  = new ColorGRB { r = 0,   g = 255, b = 0 };
     private static ColorGRB Blue   = new ColorGRB { r = 0,   g = 0,   b = 255 };
     private static ColorGRB Purple = new ColorGRB { r = 128, g = 0,   b = 128 };
     private static ColorGRB White  = new ColorGRB { r = 255, g = 255, b = 255 };
-    private static ColorGRB Off    = new ColorGRB { r = 0,   g = 0,   b = 0 };
+    //private static ColorGRB Off    = new ColorGRB { r = 0,   g = 0,   b = 0 };
 
     // Constants - PCM ports
     private const int ShooterNumValves = 6;
@@ -147,12 +147,12 @@ namespace BB_2
       return ((float)counts / EncoderCountsPerRev) * 360.0F / gearRatio;
     }
 
-    private static float GetWristDegrees()
+    private static float WristGetDegrees()
     {
       return WristTalonToDegrees(_wrist.GetSelectedSensorPosition(), WristGearRatio);
     }
 
-    private static void SetWristDegrees(float degrees)
+    private static void WristSetDegrees(float degrees)
     {
       _wrist.SetSelectedSensorPosition(WristDegreesToTalon(degrees, WristGearRatio));
     }
@@ -328,7 +328,7 @@ namespace BB_2
         int wristPosition = _wrist.GetSelectedSensorPosition();
         Debug.Print("Wrist: Moving " + ((wristOutput > 0.0) ? "UP" : "DDWN")
           + " - Position: " + wristPosition
-          + " Degrees " + WristTalonToDegrees(wristPosition, WristGearRatio));
+          + " Degrees " + WristGetDegrees());
       }
     }
 
