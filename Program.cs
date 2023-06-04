@@ -16,7 +16,7 @@ namespace BB_2
   public class Program
   {
     // Constants - System
-    private const int ThreadLoopTime = 10;  // loop time in msec
+    private const int ThreadLoopTime = 5;  // loop time in msec
 
     // Constants - Create gamepad instance
     private const int BtnX = 1;             // X button             - fire barrel 4
@@ -27,7 +27,7 @@ namespace BB_2
     private const int BtnLeftTrigger = 7;   // Left Trigger         - wrist down
     private const int BtnRightBumper = 6;   // Right Bumper         - fire barrel 5
     private const int BtnRightTrigger = 8;  // Right Trigger        - fire barrel 6
-    // private const int BtnBack = 9;          // Back button          - unused
+    private const int BtnBack = 9;          // Back button          - calibrate wrist
     private const int BtnStart = 10;        // Start button         - enable robot
     // private const int BtnLeftStick = 11;    // Left joystick press  - unused
     // private const int BtnRightStick = 12;   // Right joystick press - unused
@@ -64,7 +64,7 @@ namespace BB_2
     private const float WristAngleMax = 45.0F;               // Wrist Angle Maximum for Soft Limit
     private const float WristMoveSpeed = 0.35F;               // Wrist output power
 
-    private const float ShooterValveOpenTime = 60.0F;        // Duration of shooter value open pulse
+    private const float ShooterValveOpenTime = 50.0F;        // Duration of shooter value open pulse
 
     // Color constants for CANdle
     private struct ColorGRB
@@ -109,7 +109,7 @@ namespace BB_2
 
     // Global variables
     private static bool _enabled = false;
-    private static DateTime _enabledTime;
+    private static DateTime _lastActivityTime;
     private static readonly Animation[] _animation = {
             new SingleFadeAnimation(Green.r, Green.g, Green.b, WhiteValue, Speed, NumLeds, OffsetLed), // Disabled animation
             new ColorFlowAnimation(Blue.r, Blue.g, Blue.b, WhiteValue, Speed, NumLeds, ColorFlowAnimation.ColorFlowDirection.Forward, OffsetLed),
@@ -121,7 +121,12 @@ namespace BB_2
             new TwinkleAnimation(White.r, White.g, White.b, WhiteValue, Speed, NumLeds, TwinkleAnimation.TwinklePercent.Percent64, OffsetLed),
             new TwinkleOffAnimation(Purple.r, Purple.g, Purple.b, WhiteValue, Speed, NumLeds, TwinkleOffAnimation.TwinkleOffPercent.Percent64, OffsetLed)
         };
-    private static int _activeAnimation = 3; // Default animation for enabled state
+    private static int _activeAnimation = 6; // Default animation for enabled state
+
+    private static void RestartActivityTimer()
+    {
+      _lastActivityTime = DateTime.Now;
+    }
 
     //*********************************************************************
     //*********************************************************************
@@ -257,6 +262,9 @@ namespace BB_2
       StickDeadband(ref y);
       StickDeadband(ref turn);
 
+      if (x != 0.0F && y != 0.0F && turn != 0.0F)
+        RestartActivityTimer();
+
       float _leftFrnt_throt = y + x + turn;   // left front moves positive for forward, strafe-right, turn-right
       float _leftRear_throt = y - x + turn;   // left rear moves positive for forward, strafe-left, turn-right
       float _rghtFrnt_throt = y - x - turn;   // right front moves positive for forward, strafe-left, turn-left
@@ -285,7 +293,7 @@ namespace BB_2
     private static bool IsButtonPressed(uint buttonIdx)
     {
       bool result = false;
-      bool btnState = _gamepad.GetButton(buttonIdx);
+      bool btnState = IsButtonHeld(buttonIdx);
 
       if (btnState && !btnSave[buttonIdx])
         result = true;
@@ -295,20 +303,35 @@ namespace BB_2
       return result;
     }
 
-    //*********************************************************************
-    //*********************************************************************
-    //
-    //  Get button input and operate wrist
-    //
+    private static bool IsButtonHeld(uint buttonIdx)
+    {
+      bool result = _gamepad.GetButton(buttonIdx);
+
+      if (result)
+        RestartActivityTimer();
+
+      return result;
+    }
+
     private static bool IsPovHeld(PovBtns pov)
     {
       GameControllerValues _gpadAllValues = new GameControllerValues();
 
       _gamepad.GetAllValues(ref _gpadAllValues);
 
-      return ((PovBtns)_gpadAllValues.pov == pov);
+      bool result = ((PovBtns)_gpadAllValues.pov == pov);
+
+      if (result)
+        RestartActivityTimer();
+
+      return result;
     }
 
+    //*********************************************************************
+    //*********************************************************************
+    //
+    //  Get button input and operate wrist
+    //
     private static void HandleWristButtons()
     {
       float wristOutput = 0.0F;
@@ -325,9 +348,8 @@ namespace BB_2
       _wrist.Set(TalonSRXControlMode.PercentOutput, wristOutput);
       if (wristOutput != 0.0F)
       {
-        int wristPosition = _wrist.GetSelectedSensorPosition();
         Debug.Print("Wrist: Moving " + ((wristOutput > 0.0) ? "UP" : "DDWN")
-          + " - Position: " + wristPosition
+          + " - Position: " + _wrist.GetSelectedSensorPosition()
           + " Degrees " + WristGetDegrees());
       }
     }
@@ -409,7 +431,7 @@ namespace BB_2
     private static void HandleEnabledState()
     {
       bool enableRequest = _enabled;  // Default request to current enable state
-      TimeSpan onTime = DateTime.Now.Subtract(_enabledTime);
+      TimeSpan timeSinceLastActivity = DateTime.Now.Subtract(_lastActivityTime);
 
       // Enable button is pressed, request a state toggle
       if (IsButtonPressed(BtnStart))
@@ -420,7 +442,7 @@ namespace BB_2
         enableRequest = false;
 
       // Timeout if enabled for a long time
-      if (_enabled && ((onTime.Minutes * 60 + onTime.Seconds) > 180))
+      if (_enabled && ((timeSinceLastActivity.Minutes * 60 + timeSinceLastActivity.Seconds) > 180))
           enableRequest = false;
 
       // If enabled request is a change from previous state, update state
@@ -428,12 +450,12 @@ namespace BB_2
       {
         _enabled = enableRequest;
 
+        if (_enabled && IsButtonHeld(BtnBack))
+          WristSetDegrees(0.0F);
+
         _candle.ClearAnimation(0);
         if (_enabled)
-        {
-          _enabledTime = DateTime.Now;
           _candle.Animate(_animation[_activeAnimation]);
-        }
         else
           _candle.Animate(_animation[0]);
 
