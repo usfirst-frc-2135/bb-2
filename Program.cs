@@ -75,7 +75,7 @@ namespace BB_2
     };
 
     private static ColorGRB Red    = new ColorGRB { r = 255, g = 0,   b = 0 };
-    //private static ColorGRB Orange = new ColorGRB { r = 255, g = 48,  b = 0 };
+    private static ColorGRB Orange = new ColorGRB { r = 255, g = 48,  b = 0 };
     private static ColorGRB Green  = new ColorGRB { r = 0,   g = 255, b = 0 };
     private static ColorGRB Blue   = new ColorGRB { r = 0,   g = 0,   b = 255 };
     private static ColorGRB Purple = new ColorGRB { r = 128, g = 0,   b = 128 };
@@ -90,7 +90,7 @@ namespace BB_2
 
     // Constants - CANDle settings
     private const float Brightness = 0.75F; // CANDle brightness level
-    private const int NumLeds = 38;         // CANDle total number of LEDs
+    private const int NumLeds = 36;         // CANDle total number of LEDs
     private const int OffsetLed = 0;        // CANDle offset of first LED
     private const float Speed = 0.5F;       // CANDle animation speed
     private const int WhiteValue = 0;       // CANDle white level
@@ -112,16 +112,16 @@ namespace BB_2
     private static DateTime _lastActivityTime;
     private static readonly Animation[] _animation = {
             new SingleFadeAnimation(Green.r, Green.g, Green.b, WhiteValue, Speed, NumLeds, OffsetLed), // Disabled animation
+            new LarsonAnimation(Red.r, Red.g, Red.b, WhiteValue, Speed, NumLeds, LarsonAnimation.LarsonBounceMode.Front, 8, OffsetLed),
             new ColorFlowAnimation(Blue.r, Blue.g, Blue.b, WhiteValue, Speed, NumLeds, ColorFlowAnimation.ColorFlowDirection.Forward, OffsetLed),
             new FireAnimation(Brightness, Speed, NumLeds, 1.0F, 1.0F, false, OffsetLed),
-            new LarsonAnimation(Red.r, Red.g, Red.b, WhiteValue, Speed, NumLeds, LarsonAnimation.LarsonBounceMode.Front, 4, OffsetLed),
             new RainbowAnimation(Brightness, Speed, NumLeds, false, OffsetLed),
             new RgbFadeAnimation(Brightness, Speed, NumLeds, OffsetLed),
-            new StrobeAnimation(Red.r, Red.g, Red.b, WhiteValue, Speed/10, NumLeds, OffsetLed),
+            new StrobeAnimation(Orange.r, Orange.g, Orange.b, WhiteValue, Speed/5, NumLeds, OffsetLed),
             new TwinkleAnimation(White.r, White.g, White.b, WhiteValue, Speed, NumLeds, TwinkleAnimation.TwinklePercent.Percent64, OffsetLed),
             new TwinkleOffAnimation(Purple.r, Purple.g, Purple.b, WhiteValue, Speed, NumLeds, TwinkleOffAnimation.TwinkleOffPercent.Percent64, OffsetLed)
         };
-    private static int _activeAnimation = 6; // Default animation for enabled state
+    private static int _activeAnimation = 1; // LarsonAnimation (1) - Default animation for enabled state
 
     private static void RestartActivityTimer()
     {
