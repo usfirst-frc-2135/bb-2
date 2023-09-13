@@ -112,7 +112,7 @@ namespace BB_2
     private static DateTime _lastActivityTime;
     private static readonly Animation[] _animation = {
             new SingleFadeAnimation(Green.r, Green.g, Green.b, WhiteValue, Speed, NumLeds, OffsetLed), // Disabled animation
-            new LarsonAnimation(Red.r, Red.g, Red.b, WhiteValue, Speed, NumLeds, LarsonAnimation.LarsonBounceMode.Front, 12, OffsetLed),
+            new LarsonAnimation(Red.r, Red.g, Red.b, WhiteValue, Speed*2/3, NumLeds, LarsonAnimation.LarsonBounceMode.Front, 12, OffsetLed),
             new ColorFlowAnimation(Blue.r, Blue.g, Blue.b, WhiteValue, Speed, NumLeds, ColorFlowAnimation.ColorFlowDirection.Forward, OffsetLed),
             new FireAnimation(Brightness, Speed, NumLeds, 1.0F, 1.0F, false, OffsetLed),
             new RainbowAnimation(Brightness, Speed, NumLeds, false, OffsetLed),
@@ -415,7 +415,7 @@ namespace BB_2
           requestedAnimation = _animation.Length - 1;
       }
 
-      if (_enabled && (requestedAnimation != _activeAnimation))
+      if (!_enabled && (requestedAnimation != _activeAnimation))
       {
         _activeAnimation = requestedAnimation;
         _candle.ClearAnimation(0);
@@ -454,10 +454,8 @@ namespace BB_2
           WristSetDegrees(0.0F);
 
         _candle.ClearAnimation(0);
-        if (_enabled)
-          _candle.Animate(_animation[_activeAnimation]);
-        else
-          _candle.Animate(_animation[0]);
+        _activeAnimation = (_enabled) ? 1 : 0;
+        _candle.Animate(_animation[_activeAnimation]);
 
         Debug.Print("BB-2 is now: " + ((_enabled) ? "ENABLED" : "DISABLED") + " at " + DateTime.Now + " seconds");
       }
