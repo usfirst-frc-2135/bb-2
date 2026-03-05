@@ -240,6 +240,24 @@ namespace BB_2
 
         //*********************************************************************
         //
+        //  Return Absolute value of a number.
+        //
+        private static float Abs(float value)
+        {
+            return (value >= 0.0F) ? value : -value;
+        }
+
+        //*********************************************************************
+        //
+        //  Return Maximum value of two numbers.
+        //
+        private static float Max(float a, float b)
+        {
+            return (a > b) ? a : b;
+        }
+
+        //*********************************************************************
+        //
         //  Run drive motors from joystick inputs
         //      X axis left - strafe left/right
         //      Y axis left - forward/back (joystick axis Y is negative forward)
@@ -265,22 +283,38 @@ namespace BB_2
             if (x != 0.0F && y != 0.0F && turn != 0.0F)
                 RestartActivityTimer();
 
-            float _leftFrnt_throt = y + x + turn;   // left front moves positive for forward, strafe-right, turn-right
-            float _leftRear_throt = y - x + turn;   // left rear moves positive for forward, strafe-left, turn-right
-            float _rghtFrnt_throt = y - x - turn;   // right front moves positive for forward, strafe-left, turn-left
-            float _rghtRear_throt = y + x - turn;   // right rear moves positive for forward, strafe-right, turn-left
+            // Combine the joystick requests for each axis-motion to determine each wheel's power.
+            // Set up a variable for each drive wheel to save the power level for telemetry.
+            float _frntLeft_throt = y + x + turn;   // left front moves positive for forward, strafe-right, turn-right
+            float _frntRght_throt = y - x - turn;   // right front moves positive for forward, strafe-left, turn-left
+            float _backLeft_throt = y - x + turn;   // left rear moves positive for forward, strafe-left, turn-right
+            float _backRght_throt = y + x - turn;   // right rear moves positive for forward, strafe-right, turn-left
+
+            // Normalize the values so no wheel power exceeds 100%
+            // This ensures that the robot maintains the desired motion.
+            float max = Max(Abs(_frntLeft_throt), Abs(_frntRght_throt));
+            max = Max(max, Abs(_backLeft_throt));
+            max = Max(max, Abs(_backRght_throt));
+
+            if (max > 1.0)
+            {
+                _frntLeft_throt /= max;
+                _frntRght_throt /= max;
+                _backLeft_throt /= max;
+                _backRght_throt /= max;
+            }
 
             // Normalize here (limit to range -1.0 .. 1.0)
-            DriveNormalize(ref _leftFrnt_throt);
-            DriveNormalize(ref _leftRear_throt);
-            DriveNormalize(ref _rghtFrnt_throt);
-            DriveNormalize(ref _rghtRear_throt);
+            // DriveNormalize(ref _frntLeft_throt);
+            // DriveNormalize(ref _frntRght_throt);
+            // DriveNormalize(ref _backLeft_throt);
+            // DriveNormalize(ref _backRght_throt);
 
             // Control the motors for mecanum drive operation
-            _leftFrnt.Set(ControlMode.PercentOutput, _leftFrnt_throt);
-            _leftRear.Set(ControlMode.PercentOutput, _leftRear_throt);
-            _rghtFrnt.Set(ControlMode.PercentOutput, _rghtFrnt_throt);
-            _rghtRear.Set(ControlMode.PercentOutput, _rghtRear_throt);
+            _leftFrnt.Set(ControlMode.PercentOutput, _frntLeft_throt);
+            _rghtFrnt.Set(ControlMode.PercentOutput, _frntRght_throt);
+            _leftRear.Set(ControlMode.PercentOutput, _backLeft_throt);
+            _rghtRear.Set(ControlMode.PercentOutput, _backRght_throt);
         }
 
         //*********************************************************************
